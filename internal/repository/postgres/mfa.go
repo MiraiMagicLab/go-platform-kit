@@ -118,3 +118,11 @@ func (r *MFARepo) UseRecoveryCode(ctx context.Context, userID uuid.UUID, codeHas
 	}
 	return ct.RowsAffected() == 1, nil
 }
+
+func (r *MFARepo) Cleanup(ctx context.Context, now time.Time) error {
+	_, err := r.db.Exec(ctx, `
+		delete from user_mfa_recovery_codes
+		where used_at is not null and used_at < $1 - interval '30 days'
+	`, now)
+	return err
+}

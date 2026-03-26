@@ -16,10 +16,11 @@ type AuthHandler struct {
 	auth  *service.AuthService
 	rbac  *service.RBACService
 	users repository.UserRepository
+	audit *service.AuditService
 }
 
-func NewAuthHandler(auth *service.AuthService, rbac *service.RBACService, users repository.UserRepository) *AuthHandler {
-	return &AuthHandler{auth: auth, rbac: rbac, users: users}
+func NewAuthHandler(auth *service.AuthService, rbac *service.RBACService, users repository.UserRepository, audit *service.AuditService) *AuthHandler {
+	return &AuthHandler{auth: auth, rbac: rbac, users: users, audit: audit}
 }
 
 type registerReq struct {
@@ -44,8 +45,10 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	id, err := h.auth.Register(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
 		response.FailCode(c, http.StatusBadRequest, response.CodeAuthRegisterFailed)
+		h.audit.Log(c.Request.Context(), nil, "auth.register", "failed", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"email": req.Email})
 		return
 	}
+	h.audit.Log(c.Request.Context(), &id, "auth.register", "success", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"email": req.Email})
 	response.Success(c, http.StatusCreated, "User registered", gin.H{"id": id.String()})
 }
 
@@ -63,8 +66,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	res, err := h.auth.Login(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
 		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthInvalidCredentials)
+		h.audit.Log(c.Request.Context(), nil, "auth.login", "failed", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"email": req.Email})
 		return
 	}
+	h.audit.Log(c.Request.Context(), &res.UserID, "auth.login", "success", c.ClientIP(), c.Request.UserAgent(), nil)
 	response.Success(c, http.StatusOK, "Login success", res)
 }
 
@@ -83,6 +88,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthInvalidRefresh)
 		return
 	}
+	h.audit.Log(c.Request.Context(), &res.UserID, "auth.refresh", "success", c.ClientIP(), c.Request.UserAgent(), nil)
 	response.Success(c, http.StatusOK, "Refresh success", res)
 }
 
@@ -102,6 +108,7 @@ func (h *AuthHandler) CompleteMFA(c *gin.Context) {
 		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthInvalidMFA)
 		return
 	}
+	h.audit.Log(c.Request.Context(), &res.UserID, "auth.mfa_complete", "success", c.ClientIP(), c.Request.UserAgent(), nil)
 	response.Success(c, http.StatusOK, "MFA verification success", res)
 }
 
@@ -120,6 +127,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		response.FailCode(c, http.StatusInternalServerError, response.CodeAuthLogoutFailed)
 		return
 	}
+	h.audit.Log(c.Request.Context(), &userID, "auth.logout", "success", c.ClientIP(), c.Request.UserAgent(), nil)
 	response.Success(c, http.StatusOK, "Logout success", gin.H{"ok": true})
 }
 

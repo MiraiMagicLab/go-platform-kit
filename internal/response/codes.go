@@ -26,8 +26,9 @@ const (
 	CodeOAuthUserFail      = "oauth.user_failed"
 	CodeOAuthNotConfigured = "oauth.not_configured"
 
-	CodeCommonBadRequest = "common.bad_request"
-	CodeCommonInternal   = "common.internal_error"
+	CodeCommonBadRequest      = "common.bad_request"
+	CodeCommonInternal        = "common.internal_error"
+	CodeCommonTooManyRequests = "common.too_many_requests"
 )
 
 var defaultMessages = map[string]string{
@@ -56,8 +57,9 @@ var defaultMessages = map[string]string{
 	CodeOAuthUserFail:      "OAuth user processing failed",
 	CodeOAuthNotConfigured: "OAuth provider is not configured",
 
-	CodeCommonBadRequest: "Invalid request body",
-	CodeCommonInternal:   "Internal server error",
+	CodeCommonBadRequest:      "Invalid request body",
+	CodeCommonInternal:        "Internal server error",
+	CodeCommonTooManyRequests: "Too many requests, please try again later",
 
 	// Example for positional placeholder support.
 	"test.multi_param": "Hello {0}, you have {1} new messages in your {2} bucket.",

@@ -11,10 +11,13 @@ import (
 )
 
 type MFAHandler struct {
-	mfa *service.MFAService
+	mfa   *service.MFAService
+	audit *service.AuditService
 }
 
-func NewMFAHandler(mfa *service.MFAService) *MFAHandler { return &MFAHandler{mfa: mfa} }
+func NewMFAHandler(mfa *service.MFAService, audit *service.AuditService) *MFAHandler {
+	return &MFAHandler{mfa: mfa, audit: audit}
+}
 
 func (h *MFAHandler) Setup(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
@@ -26,8 +29,10 @@ func (h *MFAHandler) Setup(c *gin.Context) {
 	out, err := h.mfa.SetupTOTP(c.Request.Context(), userID, userID.String())
 	if err != nil {
 		response.Fail(c, http.StatusBadRequest, response.CodeMFASetupFailed, "Could not setup MFA", nil)
+		h.audit.Log(c.Request.Context(), &userID, "mfa.setup", "failed", c.ClientIP(), c.Request.UserAgent(), nil)
 		return
 	}
+	h.audit.Log(c.Request.Context(), &userID, "mfa.setup", "success", c.ClientIP(), c.Request.UserAgent(), nil)
 	response.Success(c, http.StatusOK, "MFA setup initialized", out)
 }
 
@@ -48,8 +53,10 @@ func (h *MFAHandler) Enable(c *gin.Context) {
 	}
 	if err := h.mfa.EnableTOTP(c.Request.Context(), userID, req.Code); err != nil {
 		response.Fail(c, http.StatusBadRequest, response.CodeMFAEnableFailed, "Invalid OTP", nil)
+		h.audit.Log(c.Request.Context(), &userID, "mfa.enable", "failed", c.ClientIP(), c.Request.UserAgent(), nil)
 		return
 	}
+	h.audit.Log(c.Request.Context(), &userID, "mfa.enable", "success", c.ClientIP(), c.Request.UserAgent(), nil)
 	response.Success(c, http.StatusOK, "MFA enabled", gin.H{"ok": true})
 }
 
@@ -61,7 +68,9 @@ func (h *MFAHandler) Disable(c *gin.Context) {
 	}
 	if err := h.mfa.Disable(c.Request.Context(), userID); err != nil {
 		response.Fail(c, http.StatusBadRequest, response.CodeMFADisableFailed, "Could not disable MFA", nil)
+		h.audit.Log(c.Request.Context(), &userID, "mfa.disable", "failed", c.ClientIP(), c.Request.UserAgent(), nil)
 		return
 	}
+	h.audit.Log(c.Request.Context(), &userID, "mfa.disable", "success", c.ClientIP(), c.Request.UserAgent(), nil)
 	response.Success(c, http.StatusOK, "MFA disabled", gin.H{"ok": true})
 }

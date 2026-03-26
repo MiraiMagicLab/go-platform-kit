@@ -2,8 +2,11 @@ package authkit
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -15,6 +18,7 @@ import (
 	"github.com/tienh/authsvc/internal/handler"
 	"github.com/tienh/authsvc/internal/middleware"
 	"github.com/tienh/authsvc/internal/repository/postgres"
+	"github.com/tienh/authsvc/internal/security"
 	"github.com/tienh/authsvc/internal/service"
 	"github.com/tienh/authsvc/pkg/token"
 )
@@ -36,11 +40,17 @@ type Config struct {
 	FacebookRedirectURL  string
 
 	PublicBaseURL string
+	// 32-byte key encoded in base64 for encrypting sensitive data (e.g. TOTP secret).
+	DataEncryptionKeyB64 string
 
 	// Dynamic RBAC bootstrap from host project.
 	SeedRoles           []string
 	SeedPermissions     []string
 	SeedRolePermissions map[string][]string // role -> []permission names
+
+	RateLimitLoginPerMinute   int
+	RateLimitRefreshPerMinute int
+	CORSAllowedOrigins        []string
 }
 
 func DefaultConfig() Config {
@@ -55,6 +65,9 @@ func DefaultConfig() Config {
 		SeedRolePermissions: map[string][]string{
 			"admin": {"rbac.manage"},
 		},
+		RateLimitLoginPerMinute:   20,
+		RateLimitRefreshPerMinute: 60,
+		CORSAllowedOrigins:        []string{"*"},
 	}
 }
 
@@ -66,6 +79,9 @@ type Module struct {
 
 	authMW  gin.HandlerFunc
 	rbacSvc *service.RBACService
+	cleanup *service.CleanupService
+	redis   *redis.Client
+	cfg     Config
 }
 
 func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, error) {
@@ -90,6 +106,7 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 	rbacRepo := postgres.NewRBACRepo(pg)
 	identityRepo := postgres.NewIdentityRepo(pg)
 	mfaRepo := postgres.NewMFARepo(pg)
+	auditRepo := postgres.NewAuditRepo(pg)
 
 	jwtm := token.NewJWTManager(cfg.JWTAccessSecret, cfg.JWTRefreshSecret, cfg.Issuer)
 
@@ -100,12 +117,27 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 		denylist = service.NewRedisAccessTokenDenylist(redisClient)
 	}
 
+	var mfaCipher *security.StringCipher
+	if cfg.DataEncryptionKeyB64 != "" {
+		key, err := base64.StdEncoding.DecodeString(cfg.DataEncryptionKeyB64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid DataEncryptionKeyB64: %w", err)
+		}
+		mfaCipher, err = security.NewStringCipher(key)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	rbacSvc := service.NewRBACService(rbacRepo, permCache, cfg.PermissionsCacheTTL)
-	mfaSvc := service.NewMFAService(mfaRepo, cfg.Issuer)
+	mfaSvc := service.NewMFAService(mfaRepo, cfg.Issuer, mfaCipher)
+	auditSvc := service.NewAuditService(auditRepo)
+	cleanupSvc := service.NewCleanupService(refreshRepo, mfaRepo)
 	authSvc := service.NewAuthService(
 		userRepo,
 		refreshRepo,
 		mfaRepo,
+		mfaSvc,
 		denylist,
 		jwtm,
 		cfg.AccessTokenTTL,
@@ -138,9 +170,9 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 	}
 	oauthSvc := service.NewOAuthService(identityRepo, userRepo, googleCfg, facebookCfg)
 
-	authH := handler.NewAuthHandler(authSvc, rbacSvc, userRepo)
+	authH := handler.NewAuthHandler(authSvc, rbacSvc, userRepo, auditSvc)
 	rbacH := handler.NewRBACHandler(rbacSvc)
-	mfaH := handler.NewMFAHandler(mfaSvc)
+	mfaH := handler.NewMFAHandler(mfaSvc, auditSvc)
 	oauthH := handler.NewOAuthHandler(oauthSvc, authSvc, cfg.PublicBaseURL)
 
 	authMW := middleware.JWTAuth(jwtm, userRepo, func(ctx *gin.Context, jti string) (bool, error) {
@@ -154,15 +186,26 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 		oauthH:  oauthH,
 		authMW:  authMW,
 		rbacSvc: rbacSvc,
+		cleanup: cleanupSvc,
+		redis:   redisClient,
+		cfg:     cfg,
 	}, nil
 }
 
 // Mount registers auth/rbac/mfa/oauth routes into an existing Gin router/group.
 func (m *Module) Mount(r gin.IRouter) {
+	r.Use(middleware.RequestID())
+	r.Use(middleware.AccessLog())
+	r.Use(simpleCORS(m.cfg.CORSAllowedOrigins))
+
+	memLimiter := middleware.NewInMemoryRateLimiter()
+	loginLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:login", m.cfg.RateLimitLoginPerMinute, time.Minute)
+	refreshLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:refresh", m.cfg.RateLimitRefreshPerMinute, time.Minute)
+
 	r.POST("/register", m.authH.Register)
-	r.POST("/login", m.authH.Login)
+	r.POST("/login", loginLimit, m.authH.Login)
 	r.POST("/login/2fa", m.authH.CompleteMFA)
-	r.POST("/refresh", m.authH.Refresh)
+	r.POST("/refresh", refreshLimit, m.authH.Refresh)
 	r.GET("/oauth/:provider/login", m.oauthH.Login)
 	r.GET("/oauth/:provider/callback", m.oauthH.Callback)
 
@@ -181,6 +224,58 @@ func (m *Module) Mount(r gin.IRouter) {
 	rbac.POST("/permissions", m.rbacH.CreatePermission)
 	rbac.POST("/roles/:id/permissions", m.rbacH.AssignPermissionsToRole)
 	rbac.POST("/users/:id/roles", m.rbacH.AssignRolesToUser)
+}
+
+func (m *Module) StartBackgroundCleanup(ctx context.Context, interval time.Duration) {
+	if m.cleanup == nil {
+		return
+	}
+	if interval <= 0 {
+		interval = 30 * time.Minute
+	}
+	tk := time.NewTicker(interval)
+	go func() {
+		defer tk.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-tk.C:
+				m.cleanup.RunOnce(ctx)
+			}
+		}
+	}()
+}
+
+func simpleCORS(allowedOrigins []string) gin.HandlerFunc {
+	allowAll := len(allowedOrigins) == 0
+	allowed := map[string]struct{}{}
+	for _, o := range allowedOrigins {
+		allowed[o] = struct{}{}
+		if o == "*" {
+			allowAll = true
+		}
+	}
+	return func(c *gin.Context) {
+		origin := c.GetHeader("Origin")
+		if origin != "" && (allowAll || containsOrigin(allowed, origin)) {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+			c.Writer.Header().Set("Vary", "Origin")
+			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+			c.Writer.Header().Set("Access-Control-Allow-Headers", "Authorization,Content-Type,X-Request-Id")
+			c.Writer.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
+		}
+		if strings.EqualFold(c.Request.Method, http.MethodOptions) {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+		c.Next()
+	}
+}
+
+func containsOrigin(allowed map[string]struct{}, origin string) bool {
+	_, ok := allowed[origin]
+	return ok
 }
 
 func seedRBAC(ctx context.Context, pg *pgxpool.Pool, cfg Config) error {

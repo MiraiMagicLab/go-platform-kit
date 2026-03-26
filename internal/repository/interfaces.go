@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,6 +28,7 @@ type MFARepository interface {
 	DisableMFA(ctx context.Context, userID uuid.UUID) error
 	ReplaceRecoveryCodes(ctx context.Context, userID uuid.UUID, codeHashes []string) error
 	UseRecoveryCode(ctx context.Context, userID uuid.UUID, codeHash string) (bool, error)
+	Cleanup(ctx context.Context, now time.Time) error
 }
 
 type RBACRepository interface {
@@ -44,6 +46,11 @@ type RefreshTokenRepository interface {
 	Revoke(ctx context.Context, refreshTokenID uuid.UUID, replacedBy *uuid.UUID) error
 	RevokeAllForUser(ctx context.Context, userID uuid.UUID) error
 	Rotate(ctx context.Context, oldTokenHash, newTokenHash string, newExpiresAt time.Time) (RotateResult, error)
+	Cleanup(ctx context.Context, now time.Time) error
+}
+
+type AuditRepository interface {
+	Create(ctx context.Context, in AuditLogCreate) error
 }
 
 type UserDTO struct {
@@ -71,6 +78,15 @@ type RotateResult struct {
 	NewRefreshTokenID *uuid.UUID
 	Invalid           bool
 	ReplayDetected    bool
+}
+
+type AuditLogCreate struct {
+	UserID    *uuid.UUID
+	Action    string
+	Status    string
+	IP        string
+	UserAgent string
+	Metadata  json.RawMessage
 }
 
 type MFADTO struct {

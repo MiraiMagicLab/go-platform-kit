@@ -16,6 +16,9 @@ Production-ready starter for an **authentication + authorization** service:
 2) Configure env vars:
 
 - `DATABASE_URL` (required) e.g. `postgres://user:pass@localhost:5432/authsvc?sslmode=disable`
+- `JWT_ACCESS_SECRET` (required)
+- `JWT_REFRESH_SECRET` (required)
+- `DATA_ENCRYPTION_KEY_B64` (optional but recommended, base64 of 32-byte key for TOTP secret encryption)
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URL` (optional)
 - `FACEBOOK_CLIENT_ID`, `FACEBOOK_CLIENT_SECRET`, `FACEBOOK_REDIRECT_URL` (optional)
 - `PUBLIC_BASE_URL` (default `http://localhost:8080`)
@@ -32,6 +35,7 @@ cfg.JWTRefreshSecret = os.Getenv("JWT_REFRESH_SECRET")
 cfg.GoogleClientID = os.Getenv("GOOGLE_CLIENT_ID")
 cfg.GoogleClientSecret = os.Getenv("GOOGLE_CLIENT_SECRET")
 cfg.GoogleRedirectURL = os.Getenv("GOOGLE_REDIRECT_URL")
+cfg.DataEncryptionKeyB64 = os.Getenv("DATA_ENCRYPTION_KEY_B64")
 cfg.SeedRoles = []string{"admin", "teacher", "student"}
 cfg.SeedPermissions = []string{
   "rbac.manage",
@@ -47,6 +51,7 @@ cfg.SeedRolePermissions = map[string][]string{
 
 mod, _ := authkit.New(cfg, pool, rdb)
 mod.Mount(router.Group("/auth"))
+mod.StartBackgroundCleanup(ctx, 30*time.Minute)
 ```
 
 ### API
@@ -74,6 +79,17 @@ Dynamic roles/permissions can be bootstrapped from host project via:
 - `cfg.SeedRoles`
 - `cfg.SeedPermissions`
 - `cfg.SeedRolePermissions`
+
+Security and reliability additions:
+- request-id + structured access logs on auth routes
+- rate limit for sensitive endpoints (`/login`, `/refresh`)
+- audit log table + write events on register/login/logout/mfa
+- encrypted TOTP secrets at rest (when `DATA_ENCRYPTION_KEY_B64` is provided)
+- background cleanup job for expired/revoked tokens and old used recovery codes
+
+Migrations:
+- `migrations/0001_init.up.sql`
+- `migrations/0001_init.down.sql`
 
 ### Security notes
 

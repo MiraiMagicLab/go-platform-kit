@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/pquerna/otp/totp"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/tienh/authsvc/internal/repository"
@@ -25,6 +24,7 @@ type AuthService struct {
 	users       repository.UserRepository
 	refreshRepo repository.RefreshTokenRepository
 	mfaRepo     repository.MFARepository
+	mfaVerifier MFAVerifier
 	denylist    AccessTokenDenylist
 	jwt         *token.JWTManager
 	accessTTL   time.Duration
@@ -32,10 +32,15 @@ type AuthService struct {
 	issuer      string
 }
 
+type MFAVerifier interface {
+	Verify(ctx context.Context, userID uuid.UUID, otpCodeOrRecovery string) (bool, error)
+}
+
 func NewAuthService(
 	users repository.UserRepository,
 	refreshRepo repository.RefreshTokenRepository,
 	mfaRepo repository.MFARepository,
+	mfaVerifier MFAVerifier,
 	denylist AccessTokenDenylist,
 	jwt *token.JWTManager,
 	accessTTL time.Duration,
@@ -49,6 +54,7 @@ func NewAuthService(
 		users:       users,
 		refreshRepo: refreshRepo,
 		mfaRepo:     mfaRepo,
+		mfaVerifier: mfaVerifier,
 		denylist:    denylist,
 		jwt:         jwt,
 		accessTTL:   accessTTL,
@@ -157,13 +163,12 @@ func (s *AuthService) CompleteMFA(ctx context.Context, mfaToken string, otpOrRec
 		return LoginResult{}, ErrInvalidCredentials
 	}
 
-	okTotp := totp.Validate(strings.TrimSpace(otpOrRecovery), m.TOTPSecret)
-	if !okTotp {
-		h := hashToken(strings.TrimSpace(otpOrRecovery))
-		used, err := s.mfaRepo.UseRecoveryCode(ctx, userID, h)
-		if err != nil || !used {
-			return LoginResult{}, ErrInvalidCredentials
-		}
+	if s.mfaVerifier == nil {
+		return LoginResult{}, ErrInvalidCredentials
+	}
+	okVerify, err := s.mfaVerifier.Verify(ctx, userID, strings.TrimSpace(otpOrRecovery))
+	if err != nil || !okVerify {
+		return LoginResult{}, ErrInvalidCredentials
 	}
 
 	return s.StartSession(ctx, userID)

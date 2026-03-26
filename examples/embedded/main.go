@@ -53,6 +53,7 @@ func main() {
 	cfg.FacebookClientSecret = os.Getenv("FACEBOOK_CLIENT_SECRET")
 	cfg.FacebookRedirectURL = os.Getenv("FACEBOOK_REDIRECT_URL")
 	cfg.PublicBaseURL = getEnv("PUBLIC_BASE_URL", "http://localhost:8080")
+	cfg.DataEncryptionKeyB64 = os.Getenv("DATA_ENCRYPTION_KEY_B64")
 
 	mod, err := authkit.New(cfg, pg, rdb)
 	if err != nil {
@@ -68,6 +69,7 @@ func main() {
 
 	// Mount all auth endpoints under /auth/*
 	mod.Mount(r.Group("/auth"))
+	mod.StartBackgroundCleanup(ctx, 30*time.Minute)
 
 	addr := getEnv("HTTP_ADDR", ":8080")
 	log.Printf("embedded app listening on %s", addr)

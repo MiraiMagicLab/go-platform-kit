@@ -131,3 +131,12 @@ func (r *RefreshTokenRepo) Rotate(ctx context.Context, oldTokenHash, newTokenHas
 		NewRefreshTokenID: &newID,
 	}, nil
 }
+
+func (r *RefreshTokenRepo) Cleanup(ctx context.Context, now time.Time) error {
+	_, err := r.db.Exec(ctx, `
+		delete from refresh_tokens
+		where expires_at < $1
+		   or (revoked_at is not null and revoked_at < $1 - interval '30 days')
+	`, now)
+	return err
+}

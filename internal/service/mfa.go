@@ -22,10 +22,16 @@ var ErrMFARequired = errors.New("mfa required")
 type MFAService struct {
 	repo   repository.MFARepository
 	issuer string
+	cipher StringCipher
 }
 
-func NewMFAService(repo repository.MFARepository, issuer string) *MFAService {
-	return &MFAService{repo: repo, issuer: issuer}
+type StringCipher interface {
+	Encrypt(string) (string, error)
+	Decrypt(string) (string, error)
+}
+
+func NewMFAService(repo repository.MFARepository, issuer string, cipher StringCipher) *MFAService {
+	return &MFAService{repo: repo, issuer: issuer, cipher: cipher}
 }
 
 type MFASetup struct {
@@ -39,7 +45,15 @@ func (s *MFAService) SetupTOTP(ctx context.Context, userID uuid.UUID, accountNam
 	if err != nil {
 		return MFASetup{}, err
 	}
-	if err := s.repo.UpsertTOTPSecret(ctx, userID, secret); err != nil {
+	secretToStore := secret
+	if s.cipher != nil {
+		enc, err := s.cipher.Encrypt(secret)
+		if err != nil {
+			return MFASetup{}, err
+		}
+		secretToStore = enc
+	}
+	if err := s.repo.UpsertTOTPSecret(ctx, userID, secretToStore); err != nil {
 		return MFASetup{}, err
 	}
 
@@ -68,7 +82,15 @@ func (s *MFAService) EnableTOTP(ctx context.Context, userID uuid.UUID, otpCode s
 	if err != nil || !ok {
 		return errors.New("mfa not setup")
 	}
-	ok2 := totp.Validate(otpCode, mfa.TOTPSecret)
+	secret := mfa.TOTPSecret
+	if s.cipher != nil {
+		dec, err := s.cipher.Decrypt(secret)
+		if err != nil {
+			return errors.New("invalid mfa secret")
+		}
+		secret = dec
+	}
+	ok2 := totp.Validate(otpCode, secret)
 	if !ok2 {
 		return errors.New("invalid otp")
 	}
@@ -94,8 +116,16 @@ func (s *MFAService) Verify(ctx context.Context, userID uuid.UUID, otpCodeOrReco
 	}
 
 	code := strings.ReplaceAll(strings.TrimSpace(otpCodeOrRecovery), " ", "")
+	secret := mfa.TOTPSecret
+	if s.cipher != nil {
+		dec, err := s.cipher.Decrypt(secret)
+		if err != nil {
+			return false, err
+		}
+		secret = dec
+	}
 	if len(code) >= 6 && len(code) <= 8 && isDigits(code) {
-		return totp.Validate(code, mfa.TOTPSecret), nil
+		return totp.Validate(code, secret), nil
 	}
 
 	h := sha256Hex(code)

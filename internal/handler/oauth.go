@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/tienh/authsvc/internal/response"
 	"github.com/tienh/authsvc/internal/service"
 )
 
@@ -28,7 +29,7 @@ func (h *OAuthHandler) Login(c *gin.Context) {
 
 	url, err := h.oauth.AuthCodeURL(provider, state)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "oauth not configured"})
+		response.Fail(c, http.StatusBadRequest, response.CodeOAuthNotConfigured, "OAuth provider is not configured", nil)
 		return
 	}
 	c.Redirect(http.StatusFound, url)
@@ -40,30 +41,30 @@ func (h *OAuthHandler) Callback(c *gin.Context) {
 	state := c.Query("state")
 	stored, err := c.Cookie("oauth_state")
 	if err != nil || stored == "" || stored != state {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid state"})
+		response.Fail(c, http.StatusBadRequest, response.CodeOAuthStateInvalid, "Invalid OAuth state", nil)
 		return
 	}
 	c.SetCookie("oauth_state", "", -1, "/", "", false, true)
 
 	id, err := h.oauth.ExchangeAndFetchIdentity(c.Request.Context(), provider, code)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "oauth exchange failed"})
+		response.Fail(c, http.StatusBadRequest, response.CodeOAuthExchangeFail, "OAuth exchange failed", nil)
 		return
 	}
 	userID, err := h.oauth.FindOrCreateUserForIdentity(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "oauth user create failed"})
+		response.Fail(c, http.StatusBadRequest, response.CodeOAuthUserFail, "OAuth user processing failed", nil)
 		return
 	}
 
 	session, err := h.auth.StartSession(c.Request.Context(), userID)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "could not create session"})
+		response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, "Could not create session", nil)
 		return
 	}
 
 	// For service-to-service usage, return JSON. You can also redirect to a frontend and pass tokens another way.
-	c.JSON(http.StatusOK, session)
+	response.Success(c, http.StatusOK, "OAuth login success", session)
 }
 
 func randomHex(nBytes int) string {

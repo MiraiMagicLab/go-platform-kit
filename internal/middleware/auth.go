@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/tienh/authsvc/internal/repository"
+	"github.com/tienh/authsvc/internal/response"
 	"github.com/tienh/authsvc/pkg/token"
 )
 
@@ -64,32 +65,37 @@ func JWTAuth(jwtm *token.JWTManager, users repository.UserRepository, denylistFn
 	return func(c *gin.Context) {
 		h := c.GetHeader("Authorization")
 		if h == "" || !strings.HasPrefix(h, "Bearer ") {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing bearer token"})
+			response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized)
+			c.Abort()
 			return
 		}
 		raw := strings.TrimPrefix(h, "Bearer ")
 
 		claims, err := jwtm.ParseAccess(raw)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+			response.FailCode(c, http.StatusUnauthorized, response.CodeAuthInvalidToken)
+			c.Abort()
 			return
 		}
 
 		userID, err := uuid.Parse(claims.Subject)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+			response.FailCode(c, http.StatusUnauthorized, response.CodeAuthInvalidToken)
+			c.Abort()
 			return
 		}
 
 		if denied, _ := denylist.IsDenied(c, claims.ID); denied {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "token revoked"})
+			response.FailCode(c, http.StatusUnauthorized, response.CodeAuthTokenRevoked)
+			c.Abort()
 			return
 		}
 
 		// Enforce token_version to support immediate logout invalidation.
 		u, err := users.GetByID(c.Request.Context(), userID)
 		if err != nil || u.TokenVersion != claims.TokenVersion {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "token revoked"})
+			response.FailCode(c, http.StatusUnauthorized, response.CodeAuthTokenRevoked)
+			c.Abort()
 			return
 		}
 

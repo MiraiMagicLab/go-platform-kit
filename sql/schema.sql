@@ -105,10 +105,7 @@ insert into roles (name) values ('admin') on conflict (name) do nothing;
 insert into roles (name) values ('user') on conflict (name) do nothing;
 
 insert into permissions (name) values
-  ('rbac.manage'),
-  ('course.create'),
-  ('course.update'),
-  ('lesson.view')
+  ('rbac.manage')
 on conflict (name) do nothing;
 
 -- Give admin all existing permissions

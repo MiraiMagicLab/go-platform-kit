@@ -1,4 +1,4 @@
-## Auth Service (Go + Gin + Postgres) with Dynamic RBAC
+## Embedded Auth Library (Go + Gin + Postgres)
 
 Production-ready starter for an **authentication + authorization** service:
 
@@ -9,28 +9,44 @@ Production-ready starter for an **authentication + authorization** service:
 - **Social login**: Google and Facebook OAuth2
 - **Architecture**: clean-ish layers (handler → service → repository)
 
-### Quick start
+### Quick start (embedded)
 
 1) Start Postgres (and optionally Redis), then apply the schema in `sql/schema.sql`.
 
 2) Configure env vars:
 
-- `HTTP_ADDR` (default `:8080`)
 - `DATABASE_URL` (required) e.g. `postgres://user:pass@localhost:5432/authsvc?sslmode=disable`
-- `REDIS_URL` (optional) e.g. `redis://localhost:6379/0`
-- `JWT_ACCESS_SECRET` (required)
-- `JWT_REFRESH_SECRET` (required)
-- `ACCESS_TOKEN_TTL` (default `15m`)
-- `REFRESH_TOKEN_TTL` (default `720h`)
-- `PERMISSIONS_CACHE_TTL` (default `30s`)
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URL` (optional)
 - `FACEBOOK_CLIENT_ID`, `FACEBOOK_CLIENT_SECRET`, `FACEBOOK_REDIRECT_URL` (optional)
 - `PUBLIC_BASE_URL` (default `http://localhost:8080`)
 
-3) Run:
+3) Mount into your existing Gin app:
 
-```bash
-go run ./cmd/api
+```go
+pool, _ := pgxpool.New(ctx, os.Getenv("DATABASE_URL"))
+rdb := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
+
+cfg := authkit.DefaultConfig()
+cfg.JWTAccessSecret = os.Getenv("JWT_ACCESS_SECRET")
+cfg.JWTRefreshSecret = os.Getenv("JWT_REFRESH_SECRET")
+cfg.GoogleClientID = os.Getenv("GOOGLE_CLIENT_ID")
+cfg.GoogleClientSecret = os.Getenv("GOOGLE_CLIENT_SECRET")
+cfg.GoogleRedirectURL = os.Getenv("GOOGLE_REDIRECT_URL")
+cfg.SeedRoles = []string{"admin", "teacher", "student"}
+cfg.SeedPermissions = []string{
+  "rbac.manage",
+  "course.create",
+  "course.update",
+  "lesson.view",
+}
+cfg.SeedRolePermissions = map[string][]string{
+  "admin": {"rbac.manage", "course.create", "course.update", "lesson.view"},
+  "teacher": {"course.create", "course.update", "lesson.view"},
+  "student": {"lesson.view"},
+}
+
+mod, _ := authkit.New(cfg, pool, rdb)
+mod.Mount(router.Group("/auth"))
 ```
 
 ### API
@@ -54,12 +70,52 @@ RBAC:
 - `POST /roles/:id/permissions`
 - `POST /users/:id/roles`
 
-Example protected route:
-- `POST /courses` requires permission `course.create`
+Dynamic roles/permissions can be bootstrapped from host project via:
+- `cfg.SeedRoles`
+- `cfg.SeedPermissions`
+- `cfg.SeedRolePermissions`
 
 ### Security notes
 
 - Access token invalidation uses both `token_version` checks and optional Redis denylist by `jti` on logout.
 - Refresh tokens are stored hashed and rotated in a DB transaction (`SELECT ... FOR UPDATE`) to prevent race issues.
 - Refresh token replay attempts force-revoke active refresh tokens and invalidate current access lineage (`token_version` increment).
+
+### API response contract
+
+All non-redirect API endpoints return a standard envelope:
+
+```json
+{
+  "success": true,
+  "message": "Login success",
+  "errorMessage": {
+    "errorCode": "auth.invalid_email",
+    "message": "Invalid email format",
+    "params": {}
+  },
+  "data": {}
+}
+```
+
+- `message` is fallback English text.
+- `errorMessage.errorCode` is stable i18n key for client-side translation.
+- Frontend/mobile can map `errorCode` to localized text by user locale.
+
+This project now focuses on embedded library mode only (no standalone microservice SDK client).
+
+### Example project
+
+A runnable embedded example is available at `examples/embedded/main.go`.
+
+Run it:
+
+```bash
+set DATABASE_URL=postgres://user:pass@localhost:5432/authsvc?sslmode=disable
+set JWT_ACCESS_SECRET=your-access-secret
+set JWT_REFRESH_SECRET=your-refresh-secret
+go run ./examples/embedded
+```
+
+Auth routes will be mounted at `/auth/*` (e.g. `/auth/login`, `/auth/register`).
 

@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"github.com/tienh/authsvc/internal/response"
 	"github.com/tienh/authsvc/internal/service"
 )
 
@@ -24,15 +25,15 @@ type createRoleReq struct {
 func (h *RBACHandler) CreateRole(c *gin.Context) {
 	var req createRoleReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, "Invalid request body", nil)
 		return
 	}
 	id, err := h.rbac.CreateRole(c.Request.Context(), req.Name)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "could not create role"})
+		response.Fail(c, http.StatusBadRequest, response.CodeRBACCreateRoleFailed, "Could not create role", nil)
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"id": id.String()})
+	response.Success(c, http.StatusCreated, "Role created", gin.H{"id": id.String()})
 }
 
 type createPermissionReq struct {
@@ -42,15 +43,15 @@ type createPermissionReq struct {
 func (h *RBACHandler) CreatePermission(c *gin.Context) {
 	var req createPermissionReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, "Invalid request body", nil)
 		return
 	}
 	id, err := h.rbac.CreatePermission(c.Request.Context(), req.Name)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "could not create permission"})
+		response.Fail(c, http.StatusBadRequest, response.CodeRBACCreatePermissionFailed, "Could not create permission", nil)
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"id": id.String()})
+	response.Success(c, http.StatusCreated, "Permission created", gin.H{"id": id.String()})
 }
 
 type assignRolePermsReq struct {
@@ -60,28 +61,28 @@ type assignRolePermsReq struct {
 func (h *RBACHandler) AssignPermissionsToRole(c *gin.Context) {
 	roleID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid role id"})
+		response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, "Invalid role id", nil)
 		return
 	}
 	var req assignRolePermsReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, "Invalid request body", nil)
 		return
 	}
 	var pids []uuid.UUID
 	for _, s := range req.PermissionIDs {
 		pid, err := uuid.Parse(s)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid permission id"})
+			response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, "Invalid permission id", nil)
 			return
 		}
 		pids = append(pids, pid)
 	}
 	if err := h.rbac.AssignPermissionsToRole(c.Request.Context(), roleID, pids); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "could not assign permissions"})
+		response.Fail(c, http.StatusBadRequest, response.CodeRBACAssignFailed, "Could not assign permissions", nil)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"ok": true})
+	response.Success(c, http.StatusOK, "Permissions assigned", gin.H{"ok": true})
 }
 
 type assignUserRolesReq struct {
@@ -91,26 +92,26 @@ type assignUserRolesReq struct {
 func (h *RBACHandler) AssignRolesToUser(c *gin.Context) {
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, "Invalid user id", nil)
 		return
 	}
 	var req assignUserRolesReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, "Invalid request body", nil)
 		return
 	}
 	var rids []uuid.UUID
 	for _, s := range req.RoleIDs {
 		rid, err := uuid.Parse(s)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid role id"})
+			response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, "Invalid role id", nil)
 			return
 		}
 		rids = append(rids, rid)
 	}
 	if err := h.rbac.AssignRolesToUser(c.Request.Context(), userID, rids); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "could not assign roles"})
+		response.Fail(c, http.StatusBadRequest, response.CodeRBACAssignFailed, "Could not assign roles", nil)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"ok": true})
+	response.Success(c, http.StatusOK, "Roles assigned", gin.H{"ok": true})
 }

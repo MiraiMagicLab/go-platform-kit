@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/tienh/authsvc/internal/middleware"
+	"github.com/tienh/authsvc/internal/response"
 	"github.com/tienh/authsvc/internal/service"
 )
 
@@ -18,16 +19,16 @@ func NewMFAHandler(mfa *service.MFAService) *MFAHandler { return &MFAHandler{mfa
 func (h *MFAHandler) Setup(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, "Unauthorized", nil)
 		return
 	}
 
 	out, err := h.mfa.SetupTOTP(c.Request.Context(), userID, userID.String())
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "could not setup mfa"})
+		response.Fail(c, http.StatusBadRequest, response.CodeMFASetupFailed, "Could not setup MFA", nil)
 		return
 	}
-	c.JSON(http.StatusOK, out)
+	response.Success(c, http.StatusOK, "MFA setup initialized", out)
 }
 
 type mfaEnableReq struct {
@@ -37,30 +38,30 @@ type mfaEnableReq struct {
 func (h *MFAHandler) Enable(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, "Unauthorized", nil)
 		return
 	}
 	var req mfaEnableReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, "Invalid request body", nil)
 		return
 	}
 	if err := h.mfa.EnableTOTP(c.Request.Context(), userID, req.Code); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid otp"})
+		response.Fail(c, http.StatusBadRequest, response.CodeMFAEnableFailed, "Invalid OTP", nil)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"ok": true})
+	response.Success(c, http.StatusOK, "MFA enabled", gin.H{"ok": true})
 }
 
 func (h *MFAHandler) Disable(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, "Unauthorized", nil)
 		return
 	}
 	if err := h.mfa.Disable(c.Request.Context(), userID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "could not disable mfa"})
+		response.Fail(c, http.StatusBadRequest, response.CodeMFADisableFailed, "Could not disable MFA", nil)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"ok": true})
+	response.Success(c, http.StatusOK, "MFA disabled", gin.H{"ok": true})
 }

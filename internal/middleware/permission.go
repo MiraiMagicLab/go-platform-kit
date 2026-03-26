@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/tienh/authsvc/internal/response"
 	"github.com/tienh/authsvc/internal/service"
 )
 
@@ -12,13 +13,15 @@ func RequirePermission(rbac *service.RBACService, permission string) gin.Handler
 	return func(c *gin.Context) {
 		userID, ok := UserIDFromCtx(c)
 		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized)
+			c.Abort()
 			return
 		}
 
 		perms, err := rbac.ListUserPermissions(c.Request.Context(), userID)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "failed to load permissions"})
+			response.FailCode(c, http.StatusInternalServerError, response.CodeCommonInternal)
+			c.Abort()
 			return
 		}
 
@@ -29,6 +32,7 @@ func RequirePermission(rbac *service.RBACService, permission string) gin.Handler
 			}
 		}
 
-		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		response.FailCode(c, http.StatusForbidden, response.CodeAuthForbidden, permission)
+		c.Abort()
 	}
 }

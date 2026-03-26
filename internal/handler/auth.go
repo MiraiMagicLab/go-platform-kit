@@ -2,11 +2,13 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/tienh/authsvc/internal/middleware"
 	"github.com/tienh/authsvc/internal/repository"
+	"github.com/tienh/authsvc/internal/response"
 	"github.com/tienh/authsvc/internal/service"
 )
 
@@ -28,15 +30,23 @@ type registerReq struct {
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req registerReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest)
+		return
+	}
+	if !strings.Contains(req.Email, "@") {
+		response.FailCode(c, http.StatusBadRequest, response.CodeAuthInvalidEmail)
+		return
+	}
+	if len(req.Password) < 8 {
+		response.FailCode(c, http.StatusBadRequest, response.CodeAuthInvalidPassword)
 		return
 	}
 	id, err := h.auth.Register(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "could not register"})
+		response.FailCode(c, http.StatusBadRequest, response.CodeAuthRegisterFailed)
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"id": id.String()})
+	response.Success(c, http.StatusCreated, "User registered", gin.H{"id": id.String()})
 }
 
 type loginReq struct {
@@ -47,15 +57,15 @@ type loginReq struct {
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req loginReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest)
 		return
 	}
 	res, err := h.auth.Login(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthInvalidCredentials)
 		return
 	}
-	c.JSON(http.StatusOK, res)
+	response.Success(c, http.StatusOK, "Login success", res)
 }
 
 type refreshReq struct {
@@ -65,15 +75,15 @@ type refreshReq struct {
 func (h *AuthHandler) Refresh(c *gin.Context) {
 	var req refreshReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest)
 		return
 	}
 	res, err := h.auth.Refresh(c.Request.Context(), req.RefreshToken)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid refresh token"})
+		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthInvalidRefresh)
 		return
 	}
-	c.JSON(http.StatusOK, res)
+	response.Success(c, http.StatusOK, "Refresh success", res)
 }
 
 type completeMFAReq struct {
@@ -84,52 +94,52 @@ type completeMFAReq struct {
 func (h *AuthHandler) CompleteMFA(c *gin.Context) {
 	var req completeMFAReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest)
 		return
 	}
 	res, err := h.auth.CompleteMFA(c.Request.Context(), req.MFAToken, req.Code)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid mfa"})
+		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthInvalidMFA)
 		return
 	}
-	c.JSON(http.StatusOK, res)
+	response.Success(c, http.StatusOK, "MFA verification success", res)
 }
 
 func (h *AuthHandler) Logout(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized)
 		return
 	}
 	jti, exp, ok := middleware.AccessTokenMetaFromCtx(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized)
 		return
 	}
 	if err := h.auth.Logout(c.Request.Context(), userID, jti, exp); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not logout"})
+		response.FailCode(c, http.StatusInternalServerError, response.CodeAuthLogoutFailed)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"ok": true})
+	response.Success(c, http.StatusOK, "Logout success", gin.H{"ok": true})
 }
 
 func (h *AuthHandler) Me(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized)
 		return
 	}
 
 	u, err := h.users.GetByID(c.Request.Context(), userID)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized)
 		return
 	}
 
 	roles, _ := h.rbac.ListUserRoles(c.Request.Context(), userID)
 	perms, _ := h.rbac.ListUserPermissions(c.Request.Context(), userID)
 
-	c.JSON(http.StatusOK, gin.H{
+	response.Success(c, http.StatusOK, "User profile", gin.H{
 		"id":          u.ID.String(),
 		"email":       u.Email,
 		"roles":       roles,

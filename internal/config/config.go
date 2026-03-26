@@ -15,6 +15,16 @@ type Config struct {
 	AccessTokenTTL      time.Duration
 	RefreshTokenTTL     time.Duration
 	PermissionsCacheTTL time.Duration
+
+	GoogleClientID     string
+	GoogleClientSecret string
+	GoogleRedirectURL  string
+
+	FacebookClientID     string
+	FacebookClientSecret string
+	FacebookRedirectURL  string
+
+	PublicBaseURL string
 }
 
 func Load() (Config, error) {
@@ -27,6 +37,16 @@ func Load() (Config, error) {
 		AccessTokenTTL:      mustParseDuration(getEnv("ACCESS_TOKEN_TTL", "15m")),
 		RefreshTokenTTL:     mustParseDuration(getEnv("REFRESH_TOKEN_TTL", "720h")),
 		PermissionsCacheTTL: mustParseDuration(getEnv("PERMISSIONS_CACHE_TTL", "30s")),
+
+		GoogleClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
+		GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+		GoogleRedirectURL:  os.Getenv("GOOGLE_REDIRECT_URL"),
+
+		FacebookClientID:     os.Getenv("FACEBOOK_CLIENT_ID"),
+		FacebookClientSecret: os.Getenv("FACEBOOK_CLIENT_SECRET"),
+		FacebookRedirectURL:  os.Getenv("FACEBOOK_REDIRECT_URL"),
+
+		PublicBaseURL: getEnv("PUBLIC_BASE_URL", "http://localhost:8080"),
 	}
 
 	if c.DatabaseURL == "" {

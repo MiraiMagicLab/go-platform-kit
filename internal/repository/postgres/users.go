@@ -27,23 +27,33 @@ func (r *UserRepo) Create(ctx context.Context, email, passwordHash string) (uuid
 	return id, err
 }
 
+func (r *UserRepo) CreateOAuthUser(ctx context.Context, email, passwordHash string) (uuid.UUID, error) {
+	var id uuid.UUID
+	err := r.db.QueryRow(ctx, `
+		insert into users (email, password_hash, password_login_enabled)
+		values ($1, $2, false)
+		returning id
+	`, email, passwordHash).Scan(&id)
+	return id, err
+}
+
 func (r *UserRepo) GetByEmail(ctx context.Context, email string) (repository.UserDTO, error) {
 	var u repository.UserDTO
 	err := r.db.QueryRow(ctx, `
-		select id, email, password_hash, token_version, created_at, updated_at
+		select id, email, password_hash, password_login_enabled, token_version, created_at, updated_at
 		from users
 		where email = $1
-	`, email).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.TokenVersion, &u.CreatedAt, &u.UpdatedAt)
+	`, email).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.PasswordLoginEnabled, &u.TokenVersion, &u.CreatedAt, &u.UpdatedAt)
 	return u, err
 }
 
 func (r *UserRepo) GetByID(ctx context.Context, id uuid.UUID) (repository.UserDTO, error) {
 	var u repository.UserDTO
 	err := r.db.QueryRow(ctx, `
-		select id, email, password_hash, token_version, created_at, updated_at
+		select id, email, password_hash, password_login_enabled, token_version, created_at, updated_at
 		from users
 		where id = $1
-	`, id).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.TokenVersion, &u.CreatedAt, &u.UpdatedAt)
+	`, id).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.PasswordLoginEnabled, &u.TokenVersion, &u.CreatedAt, &u.UpdatedAt)
 	return u, err
 }
 

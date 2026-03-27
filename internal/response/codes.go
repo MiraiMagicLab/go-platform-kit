@@ -15,6 +15,7 @@ const (
 	CodeAuthEmailSendFailed     = "auth.email_send_failed"
 	CodeAuthInvalidActionToken  = "auth.invalid_action_token"
 	CodeAuthPasswordResetFailed = "auth.password_reset_failed"
+	CodeAuthEmailNotVerified    = "auth.email_not_verified"
 	CodeAuthUserBanned          = "auth.user_banned"
 
 	CodeRBACCreateRoleFailed       = "rbac.create_role_failed"
@@ -50,6 +51,7 @@ var defaultMessages = map[string]string{
 	CodeAuthEmailSendFailed:     "Could not send email",
 	CodeAuthInvalidActionToken:  "Invalid or expired token",
 	CodeAuthPasswordResetFailed: "Could not reset password",
+	CodeAuthEmailNotVerified:    "Email address is not verified",
 	CodeAuthUserBanned:          "User is temporarily banned",
 
 	CodeRBACCreateRoleFailed:       "Could not create role",

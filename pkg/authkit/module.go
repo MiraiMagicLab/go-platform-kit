@@ -51,10 +51,15 @@ type Config struct {
 	// Permission required to access RBAC admin endpoints. Default: "rbac.manage".
 	RBACAdminPermission string
 
-	RateLimitLoginPerMinute   int
-	RateLimitRefreshPerMinute int
-	RateLimitForgotPerMinute  int
-	CORSAllowedOrigins        []string
+	// RequireEmailVerifiedBeforeLogin prevents issuing tokens until user's email is verified.
+	RequireEmailVerifiedBeforeLogin bool
+
+	RateLimitLoginPerMinute              int
+	RateLimitRefreshPerMinute            int
+	RateLimitForgotPerMinute             int
+	RateLimitPasswordResetPerMinute      int
+	RateLimitEmailVerifyConfirmPerMinute int
+	CORSAllowedOrigins                   []string
 
 	SMTPHost string
 	SMTPPort int
@@ -77,12 +82,15 @@ func DefaultConfig() Config {
 		SeedRolePermissions: map[string][]string{
 			"admin": {"rbac.manage"},
 		},
-		RBACAdminPermission:       "rbac.manage",
-		RateLimitLoginPerMinute:   20,
-		RateLimitRefreshPerMinute: 60,
-		RateLimitForgotPerMinute:  10,
-		CORSAllowedOrigins:        []string{"*"},
-		SMTPPort:                  587,
+		RBACAdminPermission:                  "rbac.manage",
+		RequireEmailVerifiedBeforeLogin:      false,
+		RateLimitLoginPerMinute:              20,
+		RateLimitRefreshPerMinute:            60,
+		RateLimitForgotPerMinute:             10,
+		RateLimitPasswordResetPerMinute:      10,
+		RateLimitEmailVerifyConfirmPerMinute: 10,
+		CORSAllowedOrigins:                   []string{"*"},
+		SMTPPort:                             587,
 	}
 }
 
@@ -250,6 +258,7 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 		cfg.AccessTokenTTL,
 		cfg.RefreshTokenTTL,
 		cfg.Issuer,
+		cfg.RequireEmailVerifiedBeforeLogin,
 	)
 
 	var googleCfg *oauth2.Config
@@ -278,7 +287,7 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 	oauthSvc := service.NewOAuthService(identityRepo, userRepo, googleCfg, facebookCfg)
 
 	authH := handler.NewAuthHandler(authSvc, emailSvc, rbacSvc, userRepo, auditSvc)
-	rbacH := handler.NewRBACHandler(rbacSvc, userAdminSvc)
+	rbacH := handler.NewRBACHandler(rbacSvc, userAdminSvc, auditSvc)
 	mfaH := handler.NewMFAHandler(mfaSvc, auditSvc)
 	oauthH := handler.NewOAuthHandler(oauthSvc, authSvc, cfg.PublicBaseURL)
 
@@ -329,9 +338,11 @@ func (m *Module) MountAuth(r gin.IRouter) {
 func (m *Module) MountEmail(r gin.IRouter) {
 	memLimiter := middleware.NewInMemoryRateLimiter()
 	forgotLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:forgot", m.cfg.RateLimitForgotPerMinute, time.Minute)
+	resetLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:reset_password", m.cfg.RateLimitPasswordResetPerMinute, time.Minute)
+	verifyConfirmLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:email_verify_confirm", m.cfg.RateLimitEmailVerifyConfirmPerMinute, time.Minute)
 	r.POST("/password/forgot", forgotLimit, m.authH.ForgotPassword)
-	r.POST("/password/reset", m.authH.ResetPassword)
-	r.POST("/email/verify/confirm", m.authH.ConfirmVerifyEmail)
+	r.POST("/password/reset", resetLimit, m.authH.ResetPassword)
+	r.POST("/email/verify/confirm", verifyConfirmLimit, m.authH.ConfirmVerifyEmail)
 
 	me := r.Group("/")
 	me.Use(m.authMW)
@@ -383,6 +394,8 @@ func (m *Module) MountWithOptions(r gin.IRouter, opt MountOptions) {
 	loginLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:login", m.cfg.RateLimitLoginPerMinute, time.Minute)
 	refreshLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:refresh", m.cfg.RateLimitRefreshPerMinute, time.Minute)
 	forgotLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:forgot", m.cfg.RateLimitForgotPerMinute, time.Minute)
+	resetLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:reset_password", m.cfg.RateLimitPasswordResetPerMinute, time.Minute)
+	verifyConfirmLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:email_verify_confirm", m.cfg.RateLimitEmailVerifyConfirmPerMinute, time.Minute)
 
 	// AUTH (public)
 	if opt.Auth.Register {
@@ -403,10 +416,10 @@ func (m *Module) MountWithOptions(r gin.IRouter, opt MountOptions) {
 		r.POST("/password/forgot", forgotLimit, m.authH.ForgotPassword)
 	}
 	if opt.Email.ResetPassword {
-		r.POST("/password/reset", m.authH.ResetPassword)
+		r.POST("/password/reset", resetLimit, m.authH.ResetPassword)
 	}
 	if opt.Email.VerifyConfirmPublic {
-		r.POST("/email/verify/confirm", m.authH.ConfirmVerifyEmail)
+		r.POST("/email/verify/confirm", verifyConfirmLimit, m.authH.ConfirmVerifyEmail)
 	}
 
 	// OAUTH

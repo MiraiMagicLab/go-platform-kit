@@ -77,6 +77,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			response.Fail(c, http.StatusForbidden, response.CodeAuthUserBanned, response.DefaultMessage(response.CodeAuthUserBanned), params)
 			return
 		}
+		if _, ok := err.(service.ErrEmailNotVerified); ok {
+			response.FailCode(c, http.StatusForbidden, response.CodeAuthEmailNotVerified)
+			h.audit.Log(c.Request.Context(), nil, "auth.login", "failed", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"email": req.Email})
+			return
+		}
 		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthInvalidCredentials)
 		h.audit.Log(c.Request.Context(), nil, "auth.login", "failed", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"email": req.Email})
 		return
@@ -175,6 +180,7 @@ func (h *AuthHandler) RequestVerifyEmail(c *gin.Context) {
 	}
 	if h.email == nil || h.email.RequestVerifyEmail(c.Request.Context(), userID) != nil {
 		response.FailCode(c, http.StatusBadRequest, response.CodeAuthEmailSendFailed)
+		h.audit.Log(c.Request.Context(), &userID, "auth.email_verify_request", "failed", c.ClientIP(), c.Request.UserAgent(), nil)
 		return
 	}
 	h.audit.Log(c.Request.Context(), &userID, "auth.email_verify_request", "success", c.ClientIP(), c.Request.UserAgent(), nil)
@@ -193,9 +199,11 @@ func (h *AuthHandler) ConfirmVerifyEmail(c *gin.Context) {
 	}
 	if h.email == nil || h.email.ConfirmVerifyEmail(c.Request.Context(), req.Token) != nil {
 		response.FailCode(c, http.StatusBadRequest, response.CodeAuthInvalidActionToken)
+		h.audit.Log(c.Request.Context(), nil, "auth.email_verify_confirm", "failed", c.ClientIP(), c.Request.UserAgent(), nil)
 		return
 	}
 	response.Success(c, http.StatusOK, "Email verified", gin.H{"ok": true})
+	h.audit.Log(c.Request.Context(), nil, "auth.email_verify_confirm", "success", c.ClientIP(), c.Request.UserAgent(), nil)
 }
 
 type forgotPasswordReq struct {
@@ -210,9 +218,11 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 	}
 	if h.email == nil || h.email.ForgotPassword(c.Request.Context(), req.Email) != nil {
 		response.FailCode(c, http.StatusBadRequest, response.CodeAuthEmailSendFailed)
+		h.audit.Log(c.Request.Context(), nil, "auth.password_forgot", "failed", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"email": req.Email})
 		return
 	}
 	response.Success(c, http.StatusOK, "If account exists, reset email sent", gin.H{"ok": true})
+	h.audit.Log(c.Request.Context(), nil, "auth.password_forgot", "success", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"email": req.Email})
 }
 
 type resetPasswordReq struct {
@@ -228,7 +238,9 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	}
 	if h.email == nil || h.email.ResetPassword(c.Request.Context(), req.Token, req.NewPassword) != nil {
 		response.FailCode(c, http.StatusBadRequest, response.CodeAuthPasswordResetFailed)
+		h.audit.Log(c.Request.Context(), nil, "auth.password_reset", "failed", c.ClientIP(), c.Request.UserAgent(), nil)
 		return
 	}
 	response.Success(c, http.StatusOK, "Password reset success", gin.H{"ok": true})
+	h.audit.Log(c.Request.Context(), nil, "auth.password_reset", "success", c.ClientIP(), c.Request.UserAgent(), nil)
 }

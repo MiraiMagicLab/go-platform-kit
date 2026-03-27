@@ -28,15 +28,16 @@ type ErrUserBanned struct {
 func (e ErrUserBanned) Error() string { return "user is banned" }
 
 type AuthService struct {
-	users       repository.UserRepository
-	refreshRepo repository.RefreshTokenRepository
-	mfaRepo     repository.MFARepository
-	mfaVerifier MFAVerifier
-	denylist    AccessTokenDenylist
-	jwt         *token.JWTManager
-	accessTTL   time.Duration
-	refreshTTL  time.Duration
-	issuer      string
+	users                repository.UserRepository
+	refreshRepo          repository.RefreshTokenRepository
+	mfaRepo              repository.MFARepository
+	mfaVerifier          MFAVerifier
+	denylist             AccessTokenDenylist
+	jwt                  *token.JWTManager
+	accessTTL            time.Duration
+	refreshTTL           time.Duration
+	issuer               string
+	requireEmailVerified bool
 }
 
 type MFAVerifier interface {
@@ -53,22 +54,28 @@ func NewAuthService(
 	accessTTL time.Duration,
 	refreshTTL time.Duration,
 	issuer string,
+	requireEmailVerified bool,
 ) *AuthService {
 	if denylist == nil {
 		denylist = NoopAccessTokenDenylist{}
 	}
 	return &AuthService{
-		users:       users,
-		refreshRepo: refreshRepo,
-		mfaRepo:     mfaRepo,
-		mfaVerifier: mfaVerifier,
-		denylist:    denylist,
-		jwt:         jwt,
-		accessTTL:   accessTTL,
-		refreshTTL:  refreshTTL,
-		issuer:      issuer,
+		users:                users,
+		refreshRepo:          refreshRepo,
+		mfaRepo:              mfaRepo,
+		mfaVerifier:          mfaVerifier,
+		denylist:             denylist,
+		jwt:                  jwt,
+		accessTTL:            accessTTL,
+		refreshTTL:           refreshTTL,
+		issuer:               issuer,
+		requireEmailVerified: requireEmailVerified,
 	}
 }
+
+type ErrEmailNotVerified struct{}
+
+func (e ErrEmailNotVerified) Error() string { return "email not verified" }
 
 func (s *AuthService) Register(ctx context.Context, email, password string) (userID uuid.UUID, err error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -113,6 +120,9 @@ func (s *AuthService) StartSession(ctx context.Context, userID uuid.UUID) (Login
 	}
 	if isUserBanned(u.BannedUntil) {
 		return LoginResult{}, ErrUserBanned{Until: u.BannedUntil, Reason: u.BanReason}
+	}
+	if s.requireEmailVerified && !u.EmailVerified {
+		return LoginResult{}, ErrEmailNotVerified{}
 	}
 
 	// If MFA is enabled, return MFA challenge token instead of access/refresh.

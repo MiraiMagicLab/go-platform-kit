@@ -149,10 +149,13 @@ Dynamic roles/permissions can be bootstrapped from host project via:
 - `cfg.SeedRoles`
 - `cfg.SeedPermissions`
 - `cfg.SeedRolePermissions`
+- `cfg.RequireEmailVerifiedBeforeLogin` (default `false`)
+- `cfg.RateLimitPasswordResetPerMinute` (default `10`)
+- `cfg.RateLimitEmailVerifyConfirmPerMinute` (default `10`)
 
 Security and reliability additions:
 - request-id + structured access logs on auth routes
-- rate limit for sensitive endpoints (`/login`, `/refresh`)
+- rate limit for sensitive endpoints (`/login`, `/refresh`, `/password/reset`, `/email/verify/confirm`)
 - audit log table + write events on register/login/logout/mfa
 - encrypted TOTP secrets at rest (when `DATA_ENCRYPTION_KEY_B64` is provided)
 - background cleanup job for expired/revoked tokens and old used recovery codes
@@ -160,6 +163,11 @@ Security and reliability additions:
 Migrations:
 - `migrations/0001_init.up.sql`
 - `migrations/0001_init.down.sql`
+
+Apply schema (recommended):
+```bash
+psql "$DATABASE_URL" -f migrations/0001_init.up.sql
+```
 
 ### Security notes
 

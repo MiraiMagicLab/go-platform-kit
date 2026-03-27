@@ -14,10 +14,11 @@ import (
 type RBACHandler struct {
 	rbac  *service.RBACService
 	admin *service.UserAdminService
+	audit *service.AuditService
 }
 
-func NewRBACHandler(rbac *service.RBACService, admin *service.UserAdminService) *RBACHandler {
-	return &RBACHandler{rbac: rbac, admin: admin}
+func NewRBACHandler(rbac *service.RBACService, admin *service.UserAdminService, audit *service.AuditService) *RBACHandler {
+	return &RBACHandler{rbac: rbac, admin: admin, audit: audit}
 }
 
 type createRoleReq struct {
@@ -137,13 +138,22 @@ func (h *RBACHandler) BanUser(c *gin.Context) {
 	until, err := time.Parse(time.RFC3339, req.BannedUntil)
 	if err != nil || !until.After(time.Now()) {
 		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest)
+		if h.audit != nil {
+			h.audit.Log(c.Request.Context(), &userID, "auth.user_ban", "failed", c.ClientIP(), c.Request.UserAgent(), nil)
+		}
 		return
 	}
 	if h.admin == nil || h.admin.BanUser(c.Request.Context(), userID, until.UTC(), req.Reason) != nil {
 		response.FailCode(c, http.StatusBadRequest, response.CodeRBACAssignFailed)
+		if h.audit != nil {
+			h.audit.Log(c.Request.Context(), &userID, "auth.user_ban", "failed", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"banned_until": req.BannedUntil})
+		}
 		return
 	}
 	response.Success(c, http.StatusOK, "User banned", gin.H{"ok": true, "banned_until": until.UTC().Format(time.RFC3339)})
+	if h.audit != nil {
+		h.audit.Log(c.Request.Context(), &userID, "auth.user_ban", "success", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"banned_until": until.UTC().Format(time.RFC3339), "reason": req.Reason})
+	}
 }
 
 func (h *RBACHandler) UnbanUser(c *gin.Context) {
@@ -154,7 +164,13 @@ func (h *RBACHandler) UnbanUser(c *gin.Context) {
 	}
 	if h.admin == nil || h.admin.UnbanUser(c.Request.Context(), userID) != nil {
 		response.FailCode(c, http.StatusBadRequest, response.CodeRBACAssignFailed)
+		if h.audit != nil {
+			h.audit.Log(c.Request.Context(), &userID, "auth.user_unban", "failed", c.ClientIP(), c.Request.UserAgent(), nil)
+		}
 		return
 	}
 	response.Success(c, http.StatusOK, "User unbanned", gin.H{"ok": true})
+	if h.audit != nil {
+		h.audit.Log(c.Request.Context(), &userID, "auth.user_unban", "success", c.ClientIP(), c.Request.UserAgent(), nil)
+	}
 }

@@ -91,6 +91,10 @@ func (s *OAuthService) FindOrCreateUserForIdentity(ctx context.Context, id OAuth
 	if uid, ok, err := s.identities.FindUserIDByProvider(ctx, string(id.Provider), id.ProviderSubject); err != nil {
 		return uuid.Nil, err
 	} else if ok {
+		// Treat OAuth-provided email as verified.
+		if id.Email != "" {
+			_ = s.users.SetEmailVerified(ctx, uid, true)
+		}
 		return uid, nil
 	}
 
@@ -104,6 +108,8 @@ func (s *OAuthService) FindOrCreateUserForIdentity(ctx context.Context, id OAuth
 	if err != nil {
 		return uuid.Nil, err
 	}
+	// Treat OAuth-provided email as verified.
+	_ = s.users.SetEmailVerified(ctx, userID, true)
 	_ = s.identities.LinkIdentity(ctx, userID, string(id.Provider), id.ProviderSubject, id.Email)
 	return userID, nil
 }

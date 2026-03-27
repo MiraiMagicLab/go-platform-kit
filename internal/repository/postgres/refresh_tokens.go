@@ -7,8 +7,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/MiraiMagicLab/go-auth-lib/internal/repository"
 )
 
 type RefreshTokenRepo struct {
@@ -29,8 +27,8 @@ func (r *RefreshTokenRepo) Create(ctx context.Context, userID uuid.UUID, tokenHa
 	return id, err
 }
 
-func (r *RefreshTokenRepo) GetByHash(ctx context.Context, tokenHash string) (repository.RefreshTokenDTO, error) {
-	var t repository.RefreshTokenDTO
+func (r *RefreshTokenRepo) GetByHash(ctx context.Context, tokenHash string) (RefreshTokenDTO, error) {
+	var t RefreshTokenDTO
 	err := r.db.QueryRow(ctx, `
 		select id, user_id, token_hash, expires_at, revoked_at, revoked_reason, created_at
 		from refresh_tokens
@@ -60,10 +58,10 @@ func (r *RefreshTokenRepo) RevokeAllForUser(ctx context.Context, userID uuid.UUI
 	return err
 }
 
-func (r *RefreshTokenRepo) Rotate(ctx context.Context, oldTokenHash, newTokenHash string, newExpiresAt time.Time) (repository.RotateResult, error) {
+func (r *RefreshTokenRepo) Rotate(ctx context.Context, oldTokenHash, newTokenHash string, newExpiresAt time.Time) (RotateResult, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		return repository.RotateResult{}, err
+		return RotateResult{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -78,9 +76,9 @@ func (r *RefreshTokenRepo) Rotate(ctx context.Context, oldTokenHash, newTokenHas
 	`, oldTokenHash).Scan(&oldID, &userID, &expiresAt, &revokedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return repository.RotateResult{Invalid: true}, nil
+			return RotateResult{Invalid: true}, nil
 		}
-		return repository.RotateResult{}, err
+		return RotateResult{}, err
 	}
 
 	if revokedAt != nil || time.Now().After(expiresAt) {
@@ -91,12 +89,12 @@ func (r *RefreshTokenRepo) Rotate(ctx context.Context, oldTokenHash, newTokenHas
 			    revoked_reason = 'replay_detected'
 			where user_id = $1 and revoked_at is null
 		`, userID); err != nil {
-			return repository.RotateResult{}, err
+			return RotateResult{}, err
 		}
 		if err := tx.Commit(ctx); err != nil {
-			return repository.RotateResult{}, err
+			return RotateResult{}, err
 		}
-		return repository.RotateResult{
+		return RotateResult{
 			UserID:         userID,
 			Invalid:        true,
 			ReplayDetected: true,
@@ -110,7 +108,7 @@ func (r *RefreshTokenRepo) Rotate(ctx context.Context, oldTokenHash, newTokenHas
 		returning id
 	`, userID, newTokenHash, newExpiresAt).Scan(&newID)
 	if err != nil {
-		return repository.RotateResult{}, err
+		return RotateResult{}, err
 	}
 
 	if _, err := tx.Exec(ctx, `
@@ -120,13 +118,13 @@ func (r *RefreshTokenRepo) Rotate(ctx context.Context, oldTokenHash, newTokenHas
 		    replaced_by = $2
 		where id = $1 and revoked_at is null
 	`, oldID, newID); err != nil {
-		return repository.RotateResult{}, err
+		return RotateResult{}, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return repository.RotateResult{}, err
+		return RotateResult{}, err
 	}
-	return repository.RotateResult{
+	return RotateResult{
 		UserID:            userID,
 		NewRefreshTokenID: &newID,
 	}, nil

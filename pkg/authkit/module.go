@@ -227,13 +227,14 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 		return nil, err
 	}
 
-	userRepo := postgres.NewUserRepo(pg)
-	refreshRepo := postgres.NewRefreshTokenRepo(pg)
-	rbacRepo := postgres.NewRBACRepo(pg)
-	identityRepo := postgres.NewIdentityRepo(pg)
-	mfaRepo := postgres.NewMFARepo(pg)
-	auditRepo := postgres.NewAuditRepo(pg)
-	emailTokenRepo := postgres.NewEmailTokenRepo(pg)
+	repos := postgres.NewRepositories(pg)
+	userRepo := repos.Users
+	refreshRepo := repos.RefreshTokens
+	rbacRepo := repos.RBAC
+	identityRepo := repos.Identities
+	mfaRepo := repos.MFA
+	auditRepo := repos.Audit
+	emailTokenRepo := repos.EmailTokens
 
 	jwtm := token.NewJWTManager(cfg.JWTAccessSecret, cfg.JWTRefreshSecret, cfg.Issuer)
 

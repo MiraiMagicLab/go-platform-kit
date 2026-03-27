@@ -6,14 +6,14 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/MiraiMagicLab/go-auth-lib/internal/repository"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/repository/postgres"
 )
 
 type AuditService struct {
-	repo repository.AuditRepository
+	repo *postgres.AuditRepo
 }
 
-func NewAuditService(repo repository.AuditRepository) *AuditService { return &AuditService{repo: repo} }
+func NewAuditService(repo *postgres.AuditRepo) *AuditService { return &AuditService{repo: repo} }
 
 func (s *AuditService) Log(ctx context.Context, userID *uuid.UUID, action, status, ip, userAgent string, metadata map[string]interface{}) {
 	if s == nil || s.repo == nil {
@@ -24,7 +24,7 @@ func (s *AuditService) Log(ctx context.Context, userID *uuid.UUID, action, statu
 		raw, _ := json.Marshal(metadata)
 		b = raw
 	}
-	_ = s.repo.Create(ctx, repository.AuditLogCreate{
+	_ = s.repo.Create(ctx, postgres.AuditLogCreate{
 		UserID:    userID,
 		Action:    action,
 		Status:    status,

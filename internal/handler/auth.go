@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/MiraiMagicLab/go-auth-lib/internal/middleware"
-	"github.com/MiraiMagicLab/go-auth-lib/internal/repository"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/repository/postgres"
 	"github.com/MiraiMagicLab/go-auth-lib/internal/response"
 	"github.com/MiraiMagicLab/go-auth-lib/internal/service"
 )
@@ -16,11 +16,11 @@ type AuthHandler struct {
 	auth  *service.AuthService
 	email *service.EmailService
 	rbac  *service.RBACService
-	users repository.UserRepository
+	users *postgres.UserRepo
 	audit *service.AuditService
 }
 
-func NewAuthHandler(auth *service.AuthService, email *service.EmailService, rbac *service.RBACService, users repository.UserRepository, audit *service.AuditService) *AuthHandler {
+func NewAuthHandler(auth *service.AuthService, email *service.EmailService, rbac *service.RBACService, users *postgres.UserRepo, audit *service.AuditService) *AuthHandler {
 	return &AuthHandler{auth: auth, email: email, rbac: rbac, users: users, audit: audit}
 }
 

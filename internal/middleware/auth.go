@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/MiraiMagicLab/go-auth-lib/internal/repository"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/repository/postgres"
 	"github.com/MiraiMagicLab/go-auth-lib/internal/response"
 	"github.com/MiraiMagicLab/go-auth-lib/pkg/token"
 )
@@ -60,7 +60,7 @@ func (d denylistAdapter) IsDenied(ctx *gin.Context, jti string) (bool, error) {
 	return d.check(ctx, jti)
 }
 
-func JWTAuth(jwtm *token.JWTManager, users repository.UserRepository, denylistFn func(ctx *gin.Context, jti string) (bool, error)) gin.HandlerFunc {
+func JWTAuth(jwtm *token.JWTManager, users *postgres.UserRepo, denylistFn func(ctx *gin.Context, jti string) (bool, error)) gin.HandlerFunc {
 	denylist := denylistAdapter{check: denylistFn}
 	return func(c *gin.Context) {
 		h := c.GetHeader("Authorization")

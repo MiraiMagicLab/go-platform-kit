@@ -14,13 +14,13 @@ import (
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 
-	"github.com/MiraiMagicLab/go-auth-lib/internal/repository"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/repository/postgres"
 )
 
 var ErrMFARequired = errors.New("mfa required")
 
 type MFAService struct {
-	repo   repository.MFARepository
+	repo   *postgres.MFARepo
 	issuer string
 	cipher StringCipher
 }
@@ -30,7 +30,7 @@ type StringCipher interface {
 	Decrypt(string) (string, error)
 }
 
-func NewMFAService(repo repository.MFARepository, issuer string, cipher StringCipher) *MFAService {
+func NewMFAService(repo *postgres.MFARepo, issuer string, cipher StringCipher) *MFAService {
 	return &MFAService{repo: repo, issuer: issuer, cipher: cipher}
 }
 

@@ -8,8 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/tienh/authsvc/internal/response"
-	"github.com/tienh/authsvc/internal/service"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/response"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/service"
 )
 
 type OAuthHandler struct {

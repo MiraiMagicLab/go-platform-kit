@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/tienh/authsvc/internal/repository"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/repository"
 )
 
 type RBACService struct {

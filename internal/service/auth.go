@@ -11,8 +11,8 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/tienh/authsvc/internal/repository"
-	"github.com/tienh/authsvc/pkg/token"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/repository"
+	"github.com/MiraiMagicLab/go-auth-lib/pkg/token"
 )
 
 var (

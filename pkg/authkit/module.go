@@ -15,12 +15,12 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 
-	"github.com/tienh/authsvc/internal/handler"
-	"github.com/tienh/authsvc/internal/middleware"
-	"github.com/tienh/authsvc/internal/repository/postgres"
-	"github.com/tienh/authsvc/internal/security"
-	"github.com/tienh/authsvc/internal/service"
-	"github.com/tienh/authsvc/pkg/token"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/handler"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/middleware"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/repository/postgres"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/security"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/service"
+	"github.com/MiraiMagicLab/go-auth-lib/pkg/token"
 )
 
 type Config struct {

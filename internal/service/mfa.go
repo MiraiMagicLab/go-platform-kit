@@ -14,7 +14,7 @@ import (
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 
-	"github.com/tienh/authsvc/internal/repository"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/repository"
 )
 
 var ErrMFARequired = errors.New("mfa required")

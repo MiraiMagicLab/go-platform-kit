@@ -1,4 +1,4 @@
-module github.com/tienh/authsvc
+module github.com/MiraiMagicLab/go-auth-lib
 
 go 1.25.5
 

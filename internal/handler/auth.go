@@ -6,10 +6,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/tienh/authsvc/internal/middleware"
-	"github.com/tienh/authsvc/internal/repository"
-	"github.com/tienh/authsvc/internal/response"
-	"github.com/tienh/authsvc/internal/service"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/middleware"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/repository"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/response"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/service"
 )
 
 type AuthHandler struct {

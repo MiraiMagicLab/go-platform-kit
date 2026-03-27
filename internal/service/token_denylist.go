@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tienh/authsvc/internal/db"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/db"
 )
 
 type AccessTokenDenylist interface {

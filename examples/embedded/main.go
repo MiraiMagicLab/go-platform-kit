@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/tienh/authsvc/pkg/authkit"
+	"github.com/MiraiMagicLab/go-auth-lib/pkg/authkit"
 )
 
 func main() {

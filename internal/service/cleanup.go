@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/tienh/authsvc/internal/repository"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/repository"
 )
 
 type CleanupService struct {

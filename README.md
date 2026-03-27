@@ -60,6 +60,35 @@ mod.Mount(router.Group("/auth"))
 mod.StartBackgroundCleanup(ctx, 30*time.Minute)
 ```
 
+### Install (private repo)
+
+This library is hosted as a **private** GitHub repo:
+
+- https://github.com/MiraiMagicLab/go-auth-lib
+
+To import it from another Go project, configure:
+
+1) `GOPRIVATE`
+
+```bash
+go env -w GOPRIVATE=github.com/MiraiMagicLab/*
+```
+
+2) Make sure you have access to the private repo (GitHub auth: SSH key or access token).
+
+3) Add dependency (pin to a tag)
+
+```bash
+go get github.com/MiraiMagicLab/go-auth-lib@v1.0.0
+```
+
+If you don’t have a tag yet, create and push one in this repo:
+
+```bash
+git tag v1.0.0
+git push --tags
+```
+
 ### API
 
 Auth:

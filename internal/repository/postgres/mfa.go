@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/tienh/authsvc/internal/repository"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/repository"
 )
 
 type MFARepo struct {

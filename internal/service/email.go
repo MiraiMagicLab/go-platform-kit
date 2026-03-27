@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/tienh/authsvc/internal/repository"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/repository"
 )
 
 const (

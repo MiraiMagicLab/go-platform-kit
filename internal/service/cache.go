@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/tienh/authsvc/internal/db"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/db"
 )
 
 type StringSliceCache interface {

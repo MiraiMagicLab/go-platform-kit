@@ -56,8 +56,37 @@ cfg.SeedRolePermissions = map[string][]string{
 }
 
 mod, _ := authkit.New(cfg, pool, rdb)
-mod.Mount(router.Group("/auth"))
+g := router.Group("/auth")
+mod.MountCommon(g)
+mod.MountAuth(g)
+mod.MountEmail(g)
+mod.MountMFA(g)
+mod.MountOAuth(g)
+mod.MountRBAC(g)
 mod.StartBackgroundCleanup(ctx, 30*time.Minute)
+```
+
+Or mount with fine-grained options:
+
+```go
+opt := authkit.DefaultMountOptions()
+opt.RBAC = authkit.RBACEndpoints{} // disable RBAC admin endpoints
+opt.OAuth = false                  // disable OAuth routes
+mod.MountWithOptions(g, opt)
+```
+
+### Customization (library-style)
+
+- Keep core auth logic consistent; customize via `authkit.Config` and `authkit.Hooks`.
+- **RBAC admin permission**: `cfg.RBACAdminPermission`
+- **Email links/templates**: `cfg.Hooks.BuildVerifyEmailLink`, `cfg.Hooks.BuildResetPasswordLink`, `cfg.Hooks.RenderVerifyEmail`, `cfg.Hooks.RenderResetPassword`
+
+Example hook (custom frontend link):
+
+```go
+cfg.Hooks.BuildResetPasswordLink = func(publicBaseURL, token string) string {
+  return "https://frontend.example.com/reset-password?token=" + url.QueryEscape(token)
+}
 ```
 
 ### Install (private repo)

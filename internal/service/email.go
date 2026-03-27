@@ -33,6 +33,18 @@ type EmailService struct {
 	publicBase  string
 	verifyTTL   time.Duration
 	resetTTL    time.Duration
+
+	buildVerifyLink func(publicBaseURL, rawToken string) string
+	buildResetLink  func(publicBaseURL, rawToken string) string
+	renderVerify    func(link string) (subject string, body string)
+	renderReset     func(link string) (subject string, body string)
+}
+
+type EmailHooks struct {
+	BuildVerifyEmailLink   func(publicBaseURL, rawToken string) string
+	BuildResetPasswordLink func(publicBaseURL, rawToken string) string
+	RenderVerifyEmail      func(link string) (subject string, body string)
+	RenderResetPassword    func(link string) (subject string, body string)
 }
 
 func NewEmailService(
@@ -41,15 +53,41 @@ func NewEmailService(
 	refresh repository.RefreshTokenRepository,
 	sender EmailSender,
 	publicBaseURL string,
+	hooks EmailHooks,
 ) *EmailService {
+	if hooks.BuildVerifyEmailLink == nil {
+		hooks.BuildVerifyEmailLink = func(publicBase, raw string) string {
+			return fmt.Sprintf("%s/auth/email/verify/confirm?token=%s", publicBase, url.QueryEscape(raw))
+		}
+	}
+	if hooks.BuildResetPasswordLink == nil {
+		hooks.BuildResetPasswordLink = func(publicBase, raw string) string {
+			return fmt.Sprintf("%s/auth/password/reset/confirm?token=%s", publicBase, url.QueryEscape(raw))
+		}
+	}
+	if hooks.RenderVerifyEmail == nil {
+		hooks.RenderVerifyEmail = func(link string) (string, string) {
+			return "Verify your email", "Verify your email by opening this link: " + link
+		}
+	}
+	if hooks.RenderResetPassword == nil {
+		hooks.RenderResetPassword = func(link string) (string, string) {
+			return "Reset your password", "Reset your password by opening this link: " + link
+		}
+	}
+
 	return &EmailService{
-		users:       users,
-		tokens:      tokens,
-		refreshRepo: refresh,
-		sender:      sender,
-		publicBase:  publicBaseURL,
-		verifyTTL:   24 * time.Hour,
-		resetTTL:    30 * time.Minute,
+		users:           users,
+		tokens:          tokens,
+		refreshRepo:     refresh,
+		sender:          sender,
+		publicBase:      publicBaseURL,
+		verifyTTL:       24 * time.Hour,
+		resetTTL:        30 * time.Minute,
+		buildVerifyLink: hooks.BuildVerifyEmailLink,
+		buildResetLink:  hooks.BuildResetPasswordLink,
+		renderVerify:    hooks.RenderVerifyEmail,
+		renderReset:     hooks.RenderResetPassword,
 	}
 }
 
@@ -68,9 +106,9 @@ func (s *EmailService) RequestVerifyEmail(ctx context.Context, userID uuid.UUID)
 	if err := s.tokens.Create(ctx, userID, emailActionVerify, hash, time.Now().Add(s.verifyTTL)); err != nil {
 		return err
 	}
-	link := fmt.Sprintf("%s/auth/email/verify/confirm?token=%s", s.publicBase, url.QueryEscape(raw))
-	body := "Verify your email by opening this link: " + link
-	return s.sender.Send(ctx, u.Email, "Verify your email", body)
+	link := s.buildVerifyLink(s.publicBase, raw)
+	subject, body := s.renderVerify(link)
+	return s.sender.Send(ctx, u.Email, subject, body)
 }
 
 func (s *EmailService) ConfirmVerifyEmail(ctx context.Context, rawToken string) error {
@@ -97,9 +135,9 @@ func (s *EmailService) ForgotPassword(ctx context.Context, email string) error {
 	if err := s.tokens.Create(ctx, u.ID, emailActionReset, hash, time.Now().Add(s.resetTTL)); err != nil {
 		return err
 	}
-	link := fmt.Sprintf("%s/auth/password/reset/confirm?token=%s", s.publicBase, url.QueryEscape(raw))
-	body := "Reset your password by opening this link: " + link
-	return s.sender.Send(ctx, u.Email, "Reset your password", body)
+	link := s.buildResetLink(s.publicBase, raw)
+	subject, body := s.renderReset(link)
+	return s.sender.Send(ctx, u.Email, subject, body)
 }
 
 func (s *EmailService) ResetPassword(ctx context.Context, rawToken, newPassword string) error {

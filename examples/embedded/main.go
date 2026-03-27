@@ -68,7 +68,8 @@ func main() {
 	})
 
 	// Mount all auth endpoints under /auth/*
-	mod.Mount(r.Group("/auth"))
+	g := r.Group("/auth")
+	mod.MountAll(g)
 	mod.StartBackgroundCleanup(ctx, 30*time.Minute)
 
 	addr := getEnv("HTTP_ADDR", ":8080")

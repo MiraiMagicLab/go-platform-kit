@@ -48,6 +48,9 @@ type Config struct {
 	SeedPermissions     []string
 	SeedRolePermissions map[string][]string // role -> []permission names
 
+	// Permission required to access RBAC admin endpoints. Default: "rbac.manage".
+	RBACAdminPermission string
+
 	RateLimitLoginPerMinute   int
 	RateLimitRefreshPerMinute int
 	RateLimitForgotPerMinute  int
@@ -58,6 +61,8 @@ type Config struct {
 	SMTPUser string
 	SMTPPass string
 	SMTPFrom string
+
+	Hooks Hooks
 }
 
 func DefaultConfig() Config {
@@ -72,6 +77,7 @@ func DefaultConfig() Config {
 		SeedRolePermissions: map[string][]string{
 			"admin": {"rbac.manage"},
 		},
+		RBACAdminPermission:       "rbac.manage",
 		RateLimitLoginPerMinute:   20,
 		RateLimitRefreshPerMinute: 60,
 		RateLimitForgotPerMinute:  10,
@@ -86,11 +92,87 @@ type Module struct {
 	mfaH   *handler.MFAHandler
 	oauthH *handler.OAuthHandler
 
-	authMW  gin.HandlerFunc
-	rbacSvc *service.RBACService
-	cleanup *service.CleanupService
-	redis   *redis.Client
-	cfg     Config
+	authMW        gin.HandlerFunc
+	rbacSvc       *service.RBACService
+	cleanup       *service.CleanupService
+	redis         *redis.Client
+	cfg           Config
+	commonMounted bool
+}
+
+// MountOptions provides fine-grained control over which endpoints are mounted.
+type MountOptions struct {
+	Common bool
+	Auth   AuthEndpoints
+	Email  EmailEndpoints
+	MFA    MFAEndpoints
+	OAuth  bool
+	RBAC   RBACEndpoints
+}
+
+type AuthEndpoints struct {
+	Register bool
+	Login    bool
+	Login2FA bool
+	Refresh  bool
+	Logout   bool
+	Me       bool
+}
+
+type EmailEndpoints struct {
+	ForgotPassword      bool
+	ResetPassword       bool
+	VerifyConfirmPublic bool
+	VerifyRequestAuthed bool
+}
+
+type MFAEndpoints struct {
+	Setup   bool
+	Enable  bool
+	Disable bool
+}
+
+type RBACEndpoints struct {
+	ManageRoles       bool
+	ManagePermissions bool
+	AssignRolePerms   bool
+	AssignUserRoles   bool
+	BanUser           bool
+	UnbanUser         bool
+}
+
+func DefaultMountOptions() MountOptions {
+	return MountOptions{
+		Common: true,
+		Auth: AuthEndpoints{
+			Register: true,
+			Login:    true,
+			Login2FA: true,
+			Refresh:  true,
+			Logout:   true,
+			Me:       true,
+		},
+		Email: EmailEndpoints{
+			ForgotPassword:      true,
+			ResetPassword:       true,
+			VerifyConfirmPublic: true,
+			VerifyRequestAuthed: true,
+		},
+		MFA: MFAEndpoints{
+			Setup:   true,
+			Enable:  true,
+			Disable: true,
+		},
+		OAuth: true,
+		RBAC: RBACEndpoints{
+			ManageRoles:       true,
+			ManagePermissions: true,
+			AssignRolePerms:   true,
+			AssignUserRoles:   true,
+			BanUser:           true,
+			UnbanUser:         true,
+		},
+	}
 }
 
 func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, error) {
@@ -105,6 +187,9 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 	}
 	if cfg.Issuer == "" {
 		cfg.Issuer = "authkit"
+	}
+	if cfg.RBACAdminPermission == "" {
+		cfg.RBACAdminPermission = "rbac.manage"
 	}
 	if err := seedRBAC(context.Background(), pg, cfg); err != nil {
 		return nil, err
@@ -149,7 +234,12 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 	if cfg.SMTPHost != "" && cfg.SMTPUser != "" && cfg.SMTPPass != "" && cfg.SMTPFrom != "" {
 		sender = service.NewSMTPSender(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPFrom)
 	}
-	emailSvc := service.NewEmailService(userRepo, emailTokenRepo, refreshRepo, sender, cfg.PublicBaseURL)
+	emailSvc := service.NewEmailService(userRepo, emailTokenRepo, refreshRepo, sender, cfg.PublicBaseURL, service.EmailHooks{
+		BuildVerifyEmailLink:   cfg.Hooks.BuildVerifyEmailLink,
+		BuildResetPasswordLink: cfg.Hooks.BuildResetPasswordLink,
+		RenderVerifyEmail:      cfg.Hooks.RenderVerifyEmail,
+		RenderResetPassword:    cfg.Hooks.RenderResetPassword,
+	})
 	authSvc := service.NewAuthService(
 		userRepo,
 		refreshRepo,
@@ -209,45 +299,169 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 	}, nil
 }
 
-// Mount registers auth/rbac/mfa/oauth routes into an existing Gin router/group.
-func (m *Module) Mount(r gin.IRouter) {
+// MountCommon attaches common middlewares (request-id, access log, CORS).
+// Call this once on the router group you will mount authkit routes into.
+func (m *Module) MountCommon(r gin.IRouter) {
+	if m.commonMounted {
+		return
+	}
 	r.Use(middleware.RequestID())
 	r.Use(middleware.AccessLog())
 	r.Use(simpleCORS(m.cfg.CORSAllowedOrigins))
+	m.commonMounted = true
+}
 
+func (m *Module) MountAuth(r gin.IRouter) {
 	memLimiter := middleware.NewInMemoryRateLimiter()
 	loginLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:login", m.cfg.RateLimitLoginPerMinute, time.Minute)
 	refreshLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:refresh", m.cfg.RateLimitRefreshPerMinute, time.Minute)
-	forgotLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:forgot", m.cfg.RateLimitForgotPerMinute, time.Minute)
-
 	r.POST("/register", m.authH.Register)
 	r.POST("/login", loginLimit, m.authH.Login)
 	r.POST("/login/2fa", m.authH.CompleteMFA)
 	r.POST("/refresh", refreshLimit, m.authH.Refresh)
-	r.POST("/password/forgot", forgotLimit, m.authH.ForgotPassword)
-	r.POST("/password/reset", m.authH.ResetPassword)
-	r.POST("/email/verify/confirm", m.authH.ConfirmVerifyEmail)
-	r.GET("/oauth/:provider/login", m.oauthH.Login)
-	r.GET("/oauth/:provider/callback", m.oauthH.Callback)
 
 	me := r.Group("/")
 	me.Use(m.authMW)
 	me.POST("/logout", m.authH.Logout)
 	me.GET("/me", m.authH.Me)
+}
+
+func (m *Module) MountEmail(r gin.IRouter) {
+	memLimiter := middleware.NewInMemoryRateLimiter()
+	forgotLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:forgot", m.cfg.RateLimitForgotPerMinute, time.Minute)
+	r.POST("/password/forgot", forgotLimit, m.authH.ForgotPassword)
+	r.POST("/password/reset", m.authH.ResetPassword)
+	r.POST("/email/verify/confirm", m.authH.ConfirmVerifyEmail)
+
+	me := r.Group("/")
+	me.Use(m.authMW)
+	me.POST("/email/verify/request", m.authH.RequestVerifyEmail)
+}
+
+func (m *Module) MountMFA(r gin.IRouter) {
+	me := r.Group("/")
+	me.Use(m.authMW)
 	me.POST("/mfa/setup", m.mfaH.Setup)
 	me.POST("/mfa/enable", m.mfaH.Enable)
 	me.POST("/mfa/disable", m.mfaH.Disable)
-	me.POST("/email/verify/request", m.authH.RequestVerifyEmail)
+}
 
+func (m *Module) MountOAuth(r gin.IRouter) {
+	r.GET("/oauth/:provider/login", m.oauthH.Login)
+	r.GET("/oauth/:provider/callback", m.oauthH.Callback)
+}
+
+func (m *Module) MountRBAC(r gin.IRouter) {
 	rbac := r.Group("/")
 	rbac.Use(m.authMW)
-	rbac.Use(middleware.RequirePermission(m.rbacSvc, "rbac.manage"))
+	rbac.Use(middleware.RequirePermission(m.rbacSvc, m.cfg.RBACAdminPermission))
 	rbac.POST("/roles", m.rbacH.CreateRole)
 	rbac.POST("/permissions", m.rbacH.CreatePermission)
 	rbac.POST("/roles/:id/permissions", m.rbacH.AssignPermissionsToRole)
 	rbac.POST("/users/:id/roles", m.rbacH.AssignRolesToUser)
 	rbac.POST("/users/:id/ban", m.rbacH.BanUser)
 	rbac.POST("/users/:id/unban", m.rbacH.UnbanUser)
+}
+
+// MountAll mounts common middleware and all endpoints.
+func (m *Module) MountAll(r gin.IRouter) {
+	m.MountCommon(r)
+	m.MountAuth(r)
+	m.MountEmail(r)
+	m.MountMFA(r)
+	m.MountOAuth(r)
+	m.MountRBAC(r)
+}
+
+// MountWithOptions mounts endpoints based on provided options.
+func (m *Module) MountWithOptions(r gin.IRouter, opt MountOptions) {
+	if opt.Common {
+		m.MountCommon(r)
+	}
+
+	memLimiter := middleware.NewInMemoryRateLimiter()
+	loginLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:login", m.cfg.RateLimitLoginPerMinute, time.Minute)
+	refreshLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:refresh", m.cfg.RateLimitRefreshPerMinute, time.Minute)
+	forgotLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:forgot", m.cfg.RateLimitForgotPerMinute, time.Minute)
+
+	// AUTH (public)
+	if opt.Auth.Register {
+		r.POST("/register", m.authH.Register)
+	}
+	if opt.Auth.Login {
+		r.POST("/login", loginLimit, m.authH.Login)
+	}
+	if opt.Auth.Login2FA {
+		r.POST("/login/2fa", m.authH.CompleteMFA)
+	}
+	if opt.Auth.Refresh {
+		r.POST("/refresh", refreshLimit, m.authH.Refresh)
+	}
+
+	// EMAIL (public)
+	if opt.Email.ForgotPassword {
+		r.POST("/password/forgot", forgotLimit, m.authH.ForgotPassword)
+	}
+	if opt.Email.ResetPassword {
+		r.POST("/password/reset", m.authH.ResetPassword)
+	}
+	if opt.Email.VerifyConfirmPublic {
+		r.POST("/email/verify/confirm", m.authH.ConfirmVerifyEmail)
+	}
+
+	// OAUTH
+	if opt.OAuth {
+		r.GET("/oauth/:provider/login", m.oauthH.Login)
+		r.GET("/oauth/:provider/callback", m.oauthH.Callback)
+	}
+
+	// AUTHED group
+	authed := r.Group("/")
+	authed.Use(m.authMW)
+
+	if opt.Auth.Logout {
+		authed.POST("/logout", m.authH.Logout)
+	}
+	if opt.Auth.Me {
+		authed.GET("/me", m.authH.Me)
+	}
+	if opt.MFA.Setup {
+		authed.POST("/mfa/setup", m.mfaH.Setup)
+	}
+	if opt.MFA.Enable {
+		authed.POST("/mfa/enable", m.mfaH.Enable)
+	}
+	if opt.MFA.Disable {
+		authed.POST("/mfa/disable", m.mfaH.Disable)
+	}
+	if opt.Email.VerifyRequestAuthed {
+		authed.POST("/email/verify/request", m.authH.RequestVerifyEmail)
+	}
+
+	// RBAC admin group
+	if opt.RBAC.ManageRoles || opt.RBAC.ManagePermissions || opt.RBAC.AssignRolePerms || opt.RBAC.AssignUserRoles || opt.RBAC.BanUser || opt.RBAC.UnbanUser {
+		rbac := r.Group("/")
+		rbac.Use(m.authMW)
+		rbac.Use(middleware.RequirePermission(m.rbacSvc, m.cfg.RBACAdminPermission))
+		if opt.RBAC.ManageRoles {
+			rbac.POST("/roles", m.rbacH.CreateRole)
+		}
+		if opt.RBAC.ManagePermissions {
+			rbac.POST("/permissions", m.rbacH.CreatePermission)
+		}
+		if opt.RBAC.AssignRolePerms {
+			rbac.POST("/roles/:id/permissions", m.rbacH.AssignPermissionsToRole)
+		}
+		if opt.RBAC.AssignUserRoles {
+			rbac.POST("/users/:id/roles", m.rbacH.AssignRolesToUser)
+		}
+		if opt.RBAC.BanUser {
+			rbac.POST("/users/:id/ban", m.rbacH.BanUser)
+		}
+		if opt.RBAC.UnbanUser {
+			rbac.POST("/users/:id/unban", m.rbacH.UnbanUser)
+		}
+	}
 }
 
 func (m *Module) StartBackgroundCleanup(ctx context.Context, interval time.Duration) {

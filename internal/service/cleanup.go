@@ -10,10 +10,11 @@ import (
 type CleanupService struct {
 	refresh repository.RefreshTokenRepository
 	mfa     repository.MFARepository
+	email   repository.EmailTokenRepository
 }
 
-func NewCleanupService(refresh repository.RefreshTokenRepository, mfa repository.MFARepository) *CleanupService {
-	return &CleanupService{refresh: refresh, mfa: mfa}
+func NewCleanupService(refresh repository.RefreshTokenRepository, mfa repository.MFARepository, email repository.EmailTokenRepository) *CleanupService {
+	return &CleanupService{refresh: refresh, mfa: mfa, email: email}
 }
 
 func (s *CleanupService) RunOnce(ctx context.Context) {
@@ -23,5 +24,8 @@ func (s *CleanupService) RunOnce(ctx context.Context) {
 	}
 	if s.mfa != nil {
 		_ = s.mfa.Cleanup(ctx, now)
+	}
+	if s.email != nil {
+		_ = s.email.Cleanup(ctx, now)
 	}
 }

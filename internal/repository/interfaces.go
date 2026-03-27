@@ -14,6 +14,9 @@ type UserRepository interface {
 	GetByEmail(ctx context.Context, email string) (UserDTO, error)
 	GetByID(ctx context.Context, id uuid.UUID) (UserDTO, error)
 	IncrementTokenVersion(ctx context.Context, userID uuid.UUID) error
+	SetPassword(ctx context.Context, userID uuid.UUID, passwordHash string) error
+	SetEmailVerified(ctx context.Context, userID uuid.UUID, verified bool) error
+	SetBan(ctx context.Context, userID uuid.UUID, bannedUntil *time.Time, reason string) error
 }
 
 type IdentityRepository interface {
@@ -53,11 +56,20 @@ type AuditRepository interface {
 	Create(ctx context.Context, in AuditLogCreate) error
 }
 
+type EmailTokenRepository interface {
+	Create(ctx context.Context, userID uuid.UUID, actionType, tokenHash string, expiresAt time.Time) error
+	Consume(ctx context.Context, actionType, tokenHash string, now time.Time) (uuid.UUID, bool, error)
+	Cleanup(ctx context.Context, now time.Time) error
+}
+
 type UserDTO struct {
 	ID                   uuid.UUID
 	Email                string
 	PasswordHash         string
+	EmailVerified        bool
 	PasswordLoginEnabled bool
+	BannedUntil          *time.Time
+	BanReason            *string
 	TokenVersion         int
 	CreatedAt            time.Time
 	UpdatedAt            time.Time

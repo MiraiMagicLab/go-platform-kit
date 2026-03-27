@@ -50,7 +50,14 @@ type Config struct {
 
 	RateLimitLoginPerMinute   int
 	RateLimitRefreshPerMinute int
+	RateLimitForgotPerMinute  int
 	CORSAllowedOrigins        []string
+
+	SMTPHost string
+	SMTPPort int
+	SMTPUser string
+	SMTPPass string
+	SMTPFrom string
 }
 
 func DefaultConfig() Config {
@@ -67,7 +74,9 @@ func DefaultConfig() Config {
 		},
 		RateLimitLoginPerMinute:   20,
 		RateLimitRefreshPerMinute: 60,
+		RateLimitForgotPerMinute:  10,
 		CORSAllowedOrigins:        []string{"*"},
+		SMTPPort:                  587,
 	}
 }
 
@@ -107,6 +116,7 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 	identityRepo := postgres.NewIdentityRepo(pg)
 	mfaRepo := postgres.NewMFARepo(pg)
 	auditRepo := postgres.NewAuditRepo(pg)
+	emailTokenRepo := postgres.NewEmailTokenRepo(pg)
 
 	jwtm := token.NewJWTManager(cfg.JWTAccessSecret, cfg.JWTRefreshSecret, cfg.Issuer)
 
@@ -130,9 +140,16 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 	}
 
 	rbacSvc := service.NewRBACService(rbacRepo, permCache, cfg.PermissionsCacheTTL)
+	userAdminSvc := service.NewUserAdminService(userRepo, refreshRepo)
 	mfaSvc := service.NewMFAService(mfaRepo, cfg.Issuer, mfaCipher)
 	auditSvc := service.NewAuditService(auditRepo)
-	cleanupSvc := service.NewCleanupService(refreshRepo, mfaRepo)
+	cleanupSvc := service.NewCleanupService(refreshRepo, mfaRepo, emailTokenRepo)
+
+	var sender service.EmailSender
+	if cfg.SMTPHost != "" && cfg.SMTPUser != "" && cfg.SMTPPass != "" && cfg.SMTPFrom != "" {
+		sender = service.NewSMTPSender(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPFrom)
+	}
+	emailSvc := service.NewEmailService(userRepo, emailTokenRepo, refreshRepo, sender, cfg.PublicBaseURL)
 	authSvc := service.NewAuthService(
 		userRepo,
 		refreshRepo,
@@ -170,8 +187,8 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 	}
 	oauthSvc := service.NewOAuthService(identityRepo, userRepo, googleCfg, facebookCfg)
 
-	authH := handler.NewAuthHandler(authSvc, rbacSvc, userRepo, auditSvc)
-	rbacH := handler.NewRBACHandler(rbacSvc)
+	authH := handler.NewAuthHandler(authSvc, emailSvc, rbacSvc, userRepo, auditSvc)
+	rbacH := handler.NewRBACHandler(rbacSvc, userAdminSvc)
 	mfaH := handler.NewMFAHandler(mfaSvc, auditSvc)
 	oauthH := handler.NewOAuthHandler(oauthSvc, authSvc, cfg.PublicBaseURL)
 
@@ -201,11 +218,15 @@ func (m *Module) Mount(r gin.IRouter) {
 	memLimiter := middleware.NewInMemoryRateLimiter()
 	loginLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:login", m.cfg.RateLimitLoginPerMinute, time.Minute)
 	refreshLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:refresh", m.cfg.RateLimitRefreshPerMinute, time.Minute)
+	forgotLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:forgot", m.cfg.RateLimitForgotPerMinute, time.Minute)
 
 	r.POST("/register", m.authH.Register)
 	r.POST("/login", loginLimit, m.authH.Login)
 	r.POST("/login/2fa", m.authH.CompleteMFA)
 	r.POST("/refresh", refreshLimit, m.authH.Refresh)
+	r.POST("/password/forgot", forgotLimit, m.authH.ForgotPassword)
+	r.POST("/password/reset", m.authH.ResetPassword)
+	r.POST("/email/verify/confirm", m.authH.ConfirmVerifyEmail)
 	r.GET("/oauth/:provider/login", m.oauthH.Login)
 	r.GET("/oauth/:provider/callback", m.oauthH.Callback)
 
@@ -216,6 +237,7 @@ func (m *Module) Mount(r gin.IRouter) {
 	me.POST("/mfa/setup", m.mfaH.Setup)
 	me.POST("/mfa/enable", m.mfaH.Enable)
 	me.POST("/mfa/disable", m.mfaH.Disable)
+	me.POST("/email/verify/request", m.authH.RequestVerifyEmail)
 
 	rbac := r.Group("/")
 	rbac.Use(m.authMW)
@@ -224,6 +246,8 @@ func (m *Module) Mount(r gin.IRouter) {
 	rbac.POST("/permissions", m.rbacH.CreatePermission)
 	rbac.POST("/roles/:id/permissions", m.rbacH.AssignPermissionsToRole)
 	rbac.POST("/users/:id/roles", m.rbacH.AssignRolesToUser)
+	rbac.POST("/users/:id/ban", m.rbacH.BanUser)
+	rbac.POST("/users/:id/unban", m.rbacH.UnbanUser)
 }
 
 func (m *Module) StartBackgroundCleanup(ctx context.Context, interval time.Duration) {

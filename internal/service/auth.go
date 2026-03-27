@@ -20,6 +20,13 @@ var (
 	ErrInvalidRefresh     = errors.New("invalid refresh token")
 )
 
+type ErrUserBanned struct {
+	Until  *time.Time
+	Reason *string
+}
+
+func (e ErrUserBanned) Error() string { return "user is banned" }
+
 type AuthService struct {
 	users       repository.UserRepository
 	refreshRepo repository.RefreshTokenRepository
@@ -88,6 +95,9 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (LoginR
 	if !u.PasswordLoginEnabled {
 		return LoginResult{}, ErrInvalidCredentials
 	}
+	if isUserBanned(u.BannedUntil) {
+		return LoginResult{}, ErrUserBanned{Until: u.BannedUntil, Reason: u.BanReason}
+	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
 		return LoginResult{}, ErrInvalidCredentials
@@ -100,6 +110,9 @@ func (s *AuthService) StartSession(ctx context.Context, userID uuid.UUID) (Login
 	u, err := s.users.GetByID(ctx, userID)
 	if err != nil {
 		return LoginResult{}, ErrInvalidCredentials
+	}
+	if isUserBanned(u.BannedUntil) {
+		return LoginResult{}, ErrUserBanned{Until: u.BannedUntil, Reason: u.BanReason}
 	}
 
 	// If MFA is enabled, return MFA challenge token instead of access/refresh.
@@ -208,6 +221,9 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (LoginRe
 	if err != nil {
 		return LoginResult{}, ErrInvalidRefresh
 	}
+	if isUserBanned(u.BannedUntil) {
+		return LoginResult{}, ErrInvalidRefresh
+	}
 	if claims.TokenVersion != u.TokenVersion {
 		return LoginResult{}, ErrInvalidRefresh
 	}
@@ -243,4 +259,8 @@ func (s *AuthService) Logout(ctx context.Context, userID uuid.UUID, accessJTI st
 func hashToken(raw string) string {
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])
+}
+
+func isUserBanned(until *time.Time) bool {
+	return until != nil && time.Now().Before(*until)
 }

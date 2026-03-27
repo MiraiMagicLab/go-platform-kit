@@ -6,7 +6,10 @@ create table if not exists users (
   id uuid primary key default gen_random_uuid(),
   email text not null unique,
   password_hash text not null,
+  email_verified boolean not null default false,
   password_login_enabled boolean not null default true,
+  banned_until timestamptz null,
+  ban_reason text null,
   token_version int not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -99,6 +102,20 @@ create table if not exists user_mfa_recovery_codes (
 
 create index if not exists idx_user_mfa_recovery_user_id on user_mfa_recovery_codes(user_id);
 create index if not exists idx_user_mfa_recovery_code_hash on user_mfa_recovery_codes(code_hash);
+
+-- EMAIL ACTION TOKENS (verify email / reset password)
+create table if not exists email_action_tokens (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  action_type text not null, -- verify_email | reset_password
+  token_hash text not null unique,
+  expires_at timestamptz not null,
+  used_at timestamptz null,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_email_action_tokens_user_id on email_action_tokens(user_id);
+create index if not exists idx_email_action_tokens_action on email_action_tokens(action_type);
+create index if not exists idx_email_action_tokens_expires on email_action_tokens(expires_at);
 
 -- AUDIT LOGS
 create table if not exists audit_logs (

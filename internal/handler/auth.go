@@ -14,13 +14,14 @@ import (
 
 type AuthHandler struct {
 	auth  *service.AuthService
+	email *service.EmailService
 	rbac  *service.RBACService
 	users repository.UserRepository
 	audit *service.AuditService
 }
 
-func NewAuthHandler(auth *service.AuthService, rbac *service.RBACService, users repository.UserRepository, audit *service.AuditService) *AuthHandler {
-	return &AuthHandler{auth: auth, rbac: rbac, users: users, audit: audit}
+func NewAuthHandler(auth *service.AuthService, email *service.EmailService, rbac *service.RBACService, users repository.UserRepository, audit *service.AuditService) *AuthHandler {
+	return &AuthHandler{auth: auth, email: email, rbac: rbac, users: users, audit: audit}
 }
 
 type registerReq struct {
@@ -65,6 +66,17 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 	res, err := h.auth.Login(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
+		if b, ok := err.(service.ErrUserBanned); ok {
+			params := map[string]interface{}{}
+			if b.Until != nil {
+				params["banned_until"] = b.Until.UTC().Format("2006-01-02T15:04:05Z")
+			}
+			if b.Reason != nil {
+				params["reason"] = *b.Reason
+			}
+			response.Fail(c, http.StatusForbidden, response.CodeAuthUserBanned, response.DefaultMessage(response.CodeAuthUserBanned), params)
+			return
+		}
 		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthInvalidCredentials)
 		h.audit.Log(c.Request.Context(), nil, "auth.login", "failed", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"email": req.Email})
 		return
@@ -153,4 +165,70 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		"roles":       roles,
 		"permissions": perms,
 	})
+}
+
+func (h *AuthHandler) RequestVerifyEmail(c *gin.Context) {
+	userID, ok := middleware.UserIDFromCtx(c)
+	if !ok {
+		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized)
+		return
+	}
+	if h.email == nil || h.email.RequestVerifyEmail(c.Request.Context(), userID) != nil {
+		response.FailCode(c, http.StatusBadRequest, response.CodeAuthEmailSendFailed)
+		return
+	}
+	h.audit.Log(c.Request.Context(), &userID, "auth.email_verify_request", "success", c.ClientIP(), c.Request.UserAgent(), nil)
+	response.Success(c, http.StatusOK, "Verification email sent", gin.H{"ok": true})
+}
+
+type confirmTokenReq struct {
+	Token string `json:"token" binding:"required"`
+}
+
+func (h *AuthHandler) ConfirmVerifyEmail(c *gin.Context) {
+	var req confirmTokenReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest)
+		return
+	}
+	if h.email == nil || h.email.ConfirmVerifyEmail(c.Request.Context(), req.Token) != nil {
+		response.FailCode(c, http.StatusBadRequest, response.CodeAuthInvalidActionToken)
+		return
+	}
+	response.Success(c, http.StatusOK, "Email verified", gin.H{"ok": true})
+}
+
+type forgotPasswordReq struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+func (h *AuthHandler) ForgotPassword(c *gin.Context) {
+	var req forgotPasswordReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest)
+		return
+	}
+	if h.email == nil || h.email.ForgotPassword(c.Request.Context(), req.Email) != nil {
+		response.FailCode(c, http.StatusBadRequest, response.CodeAuthEmailSendFailed)
+		return
+	}
+	response.Success(c, http.StatusOK, "If account exists, reset email sent", gin.H{"ok": true})
+}
+
+type resetPasswordReq struct {
+	Token       string `json:"token" binding:"required"`
+	NewPassword string `json:"new_password" binding:"required,min=8"`
+}
+
+func (h *AuthHandler) ResetPassword(c *gin.Context) {
+	var req resetPasswordReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest)
+		return
+	}
+	if h.email == nil || h.email.ResetPassword(c.Request.Context(), req.Token, req.NewPassword) != nil {
+		response.FailCode(c, http.StatusBadRequest, response.CodeAuthPasswordResetFailed)
+		return
+	}
+	response.Success(c, http.StatusOK, "Password reset success", gin.H{"ok": true})
 }

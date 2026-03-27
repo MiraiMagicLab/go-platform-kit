@@ -1,4 +1,5 @@
 drop table if exists audit_logs;
+drop table if exists email_action_tokens;
 drop table if exists user_mfa_recovery_codes;
 drop table if exists user_mfa;
 drop table if exists user_identities;

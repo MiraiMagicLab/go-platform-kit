@@ -98,6 +98,13 @@ func JWTAuth(jwtm *token.JWTManager, users repository.UserRepository, denylistFn
 			c.Abort()
 			return
 		}
+		if u.BannedUntil != nil && time.Now().Before(*u.BannedUntil) {
+			response.Fail(c, http.StatusForbidden, response.CodeAuthUserBanned, response.DefaultMessage(response.CodeAuthUserBanned), map[string]interface{}{
+				"banned_until": u.BannedUntil.UTC().Format("2006-01-02T15:04:05Z"),
+			})
+			c.Abort()
+			return
+		}
 
 		c.Set(ctxUserIDKey, userID)
 		c.Set(ctxAccessJTIKey, claims.ID)

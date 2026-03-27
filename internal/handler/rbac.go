@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -11,11 +12,12 @@ import (
 )
 
 type RBACHandler struct {
-	rbac *service.RBACService
+	rbac  *service.RBACService
+	admin *service.UserAdminService
 }
 
-func NewRBACHandler(rbac *service.RBACService) *RBACHandler {
-	return &RBACHandler{rbac: rbac}
+func NewRBACHandler(rbac *service.RBACService, admin *service.UserAdminService) *RBACHandler {
+	return &RBACHandler{rbac: rbac, admin: admin}
 }
 
 type createRoleReq struct {
@@ -114,4 +116,45 @@ func (h *RBACHandler) AssignRolesToUser(c *gin.Context) {
 		return
 	}
 	response.Success(c, http.StatusOK, "Roles assigned", gin.H{"ok": true})
+}
+
+type banUserReq struct {
+	BannedUntil string `json:"banned_until" binding:"required"` // RFC3339
+	Reason      string `json:"reason"`
+}
+
+func (h *RBACHandler) BanUser(c *gin.Context) {
+	userID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest)
+		return
+	}
+	var req banUserReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest)
+		return
+	}
+	until, err := time.Parse(time.RFC3339, req.BannedUntil)
+	if err != nil || !until.After(time.Now()) {
+		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest)
+		return
+	}
+	if h.admin == nil || h.admin.BanUser(c.Request.Context(), userID, until.UTC(), req.Reason) != nil {
+		response.FailCode(c, http.StatusBadRequest, response.CodeRBACAssignFailed)
+		return
+	}
+	response.Success(c, http.StatusOK, "User banned", gin.H{"ok": true, "banned_until": until.UTC().Format(time.RFC3339)})
+}
+
+func (h *RBACHandler) UnbanUser(c *gin.Context) {
+	userID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest)
+		return
+	}
+	if h.admin == nil || h.admin.UnbanUser(c.Request.Context(), userID) != nil {
+		response.FailCode(c, http.StatusBadRequest, response.CodeRBACAssignFailed)
+		return
+	}
+	response.Success(c, http.StatusOK, "User unbanned", gin.H{"ok": true})
 }

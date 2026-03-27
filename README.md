@@ -19,6 +19,7 @@ Production-ready starter for an **authentication + authorization** service:
 - `JWT_ACCESS_SECRET` (required)
 - `JWT_REFRESH_SECRET` (required)
 - `DATA_ENCRYPTION_KEY_B64` (optional but recommended, base64 of 32-byte key for TOTP secret encryption)
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` (required for email verify/reset flows)
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URL` (optional)
 - `FACEBOOK_CLIENT_ID`, `FACEBOOK_CLIENT_SECRET`, `FACEBOOK_REDIRECT_URL` (optional)
 - `PUBLIC_BASE_URL` (default `http://localhost:8080`)
@@ -36,6 +37,11 @@ cfg.GoogleClientID = os.Getenv("GOOGLE_CLIENT_ID")
 cfg.GoogleClientSecret = os.Getenv("GOOGLE_CLIENT_SECRET")
 cfg.GoogleRedirectURL = os.Getenv("GOOGLE_REDIRECT_URL")
 cfg.DataEncryptionKeyB64 = os.Getenv("DATA_ENCRYPTION_KEY_B64")
+cfg.SMTPHost = os.Getenv("SMTP_HOST")
+cfg.SMTPPort = 587
+cfg.SMTPUser = os.Getenv("SMTP_USER")
+cfg.SMTPPass = os.Getenv("SMTP_PASS")
+cfg.SMTPFrom = os.Getenv("SMTP_FROM")
 cfg.SeedRoles = []string{"admin", "teacher", "student"}
 cfg.SeedPermissions = []string{
   "rbac.manage",
@@ -60,12 +66,16 @@ Auth:
 - `POST /register`
 - `POST /login`
 - `POST /refresh`
+- `POST /password/forgot`
+- `POST /password/reset`
+- `POST /email/verify/confirm`
 - `POST /login/2fa`
 - `POST /logout`
 - `GET /me`
 - `POST /mfa/setup`
 - `POST /mfa/enable`
 - `POST /mfa/disable`
+- `POST /email/verify/request` (authenticated)
 - `GET /oauth/google/login`
 - `GET /oauth/facebook/login`
 
@@ -74,6 +84,8 @@ RBAC:
 - `POST /permissions`
 - `POST /roles/:id/permissions`
 - `POST /users/:id/roles`
+- `POST /users/:id/ban` (body: `{ "banned_until": "<RFC3339>", "reason": "..." }`)
+- `POST /users/:id/unban`
 
 Dynamic roles/permissions can be bootstrapped from host project via:
 - `cfg.SeedRoles`

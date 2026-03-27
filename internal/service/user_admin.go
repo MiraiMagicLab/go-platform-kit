@@ -6,15 +6,15 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/MiraiMagicLab/go-auth-lib/internal/repository"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/repository/postgres"
 )
 
 type UserAdminService struct {
-	users   repository.UserRepository
-	refresh repository.RefreshTokenRepository
+	users   *postgres.UserRepo
+	refresh *postgres.RefreshTokenRepo
 }
 
-func NewUserAdminService(users repository.UserRepository, refresh repository.RefreshTokenRepository) *UserAdminService {
+func NewUserAdminService(users *postgres.UserRepo, refresh *postgres.RefreshTokenRepo) *UserAdminService {
 	return &UserAdminService{users: users, refresh: refresh}
 }
 

@@ -15,7 +15,7 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 
-	"github.com/MiraiMagicLab/go-auth-lib/internal/repository"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/repository/postgres"
 )
 
 var ErrOAuthNotConfigured = errors.New("oauth not configured")
@@ -28,15 +28,15 @@ const (
 )
 
 type OAuthService struct {
-	identities repository.IdentityRepository
-	users      repository.UserRepository
+	identities *postgres.IdentityRepo
+	users      *postgres.UserRepo
 
 	googleCfg   *oauth2.Config
 	facebookCfg *oauth2.Config
 	httpClient  *http.Client
 }
 
-func NewOAuthService(identities repository.IdentityRepository, users repository.UserRepository, googleCfg, facebookCfg *oauth2.Config) *OAuthService {
+func NewOAuthService(identities *postgres.IdentityRepo, users *postgres.UserRepo, googleCfg, facebookCfg *oauth2.Config) *OAuthService {
 	return &OAuthService{
 		identities:  identities,
 		users:       users,

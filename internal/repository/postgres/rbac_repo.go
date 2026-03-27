@@ -112,3 +112,4 @@ func (r *RBACRepo) ListUserRoles(ctx context.Context, userID uuid.UUID) ([]strin
 	}
 	return out, rows.Err()
 }
+

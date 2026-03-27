@@ -4,16 +4,16 @@ import (
 	"context"
 	"time"
 
-	"github.com/MiraiMagicLab/go-auth-lib/internal/repository"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/repository/postgres"
 )
 
 type CleanupService struct {
-	refresh repository.RefreshTokenRepository
-	mfa     repository.MFARepository
-	email   repository.EmailTokenRepository
+	refresh *postgres.RefreshTokenRepo
+	mfa     *postgres.MFARepo
+	email   *postgres.EmailTokenRepo
 }
 
-func NewCleanupService(refresh repository.RefreshTokenRepository, mfa repository.MFARepository, email repository.EmailTokenRepository) *CleanupService {
+func NewCleanupService(refresh *postgres.RefreshTokenRepo, mfa *postgres.MFARepo, email *postgres.EmailTokenRepo) *CleanupService {
 	return &CleanupService{refresh: refresh, mfa: mfa, email: email}
 }
 

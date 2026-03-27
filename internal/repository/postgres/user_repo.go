@@ -6,8 +6,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/MiraiMagicLab/go-auth-lib/internal/repository"
 )
 
 type UserRepo struct {
@@ -38,8 +36,8 @@ func (r *UserRepo) CreateOAuthUser(ctx context.Context, email, passwordHash stri
 	return id, err
 }
 
-func (r *UserRepo) GetByEmail(ctx context.Context, email string) (repository.UserDTO, error) {
-	var u repository.UserDTO
+func (r *UserRepo) GetByEmail(ctx context.Context, email string) (UserDTO, error) {
+	var u UserDTO
 	err := r.db.QueryRow(ctx, `
 		select id, email, password_hash, email_verified, password_login_enabled, banned_until, ban_reason, token_version, created_at, updated_at
 		from users
@@ -48,8 +46,8 @@ func (r *UserRepo) GetByEmail(ctx context.Context, email string) (repository.Use
 	return u, err
 }
 
-func (r *UserRepo) GetByID(ctx context.Context, id uuid.UUID) (repository.UserDTO, error) {
-	var u repository.UserDTO
+func (r *UserRepo) GetByID(ctx context.Context, id uuid.UUID) (UserDTO, error) {
+	var u UserDTO
 	err := r.db.QueryRow(ctx, `
 		select id, email, password_hash, email_verified, password_login_enabled, banned_until, ban_reason, token_version, created_at, updated_at
 		from users
@@ -98,3 +96,4 @@ func (r *UserRepo) SetBan(ctx context.Context, userID uuid.UUID, bannedUntil *ti
 	`, userID, bannedUntil, reason)
 	return err
 }
+

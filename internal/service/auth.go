@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/MiraiMagicLab/go-auth-lib/internal/repository"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/repository/postgres"
 	"github.com/MiraiMagicLab/go-auth-lib/pkg/token"
 )
 
@@ -28,9 +28,9 @@ type ErrUserBanned struct {
 func (e ErrUserBanned) Error() string { return "user is banned" }
 
 type AuthService struct {
-	users                repository.UserRepository
-	refreshRepo          repository.RefreshTokenRepository
-	mfaRepo              repository.MFARepository
+	users                *postgres.UserRepo
+	refreshRepo          *postgres.RefreshTokenRepo
+	mfaRepo              *postgres.MFARepo
 	mfaVerifier          MFAVerifier
 	denylist             AccessTokenDenylist
 	jwt                  *token.JWTManager
@@ -45,9 +45,9 @@ type MFAVerifier interface {
 }
 
 func NewAuthService(
-	users repository.UserRepository,
-	refreshRepo repository.RefreshTokenRepository,
-	mfaRepo repository.MFARepository,
+	users *postgres.UserRepo,
+	refreshRepo *postgres.RefreshTokenRepo,
+	mfaRepo *postgres.MFARepo,
 	mfaVerifier MFAVerifier,
 	denylist AccessTokenDenylist,
 	jwt *token.JWTManager,

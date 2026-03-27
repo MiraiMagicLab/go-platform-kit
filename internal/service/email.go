@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/MiraiMagicLab/go-auth-lib/internal/repository"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/repository/postgres"
 )
 
 const (
@@ -26,9 +26,9 @@ type EmailSender interface {
 }
 
 type EmailService struct {
-	users       repository.UserRepository
-	tokens      repository.EmailTokenRepository
-	refreshRepo repository.RefreshTokenRepository
+	users       *postgres.UserRepo
+	tokens      *postgres.EmailTokenRepo
+	refreshRepo *postgres.RefreshTokenRepo
 	sender      EmailSender
 	publicBase  string
 	verifyTTL   time.Duration
@@ -48,9 +48,9 @@ type EmailHooks struct {
 }
 
 func NewEmailService(
-	users repository.UserRepository,
-	tokens repository.EmailTokenRepository,
-	refresh repository.RefreshTokenRepository,
+	users *postgres.UserRepo,
+	tokens *postgres.EmailTokenRepo,
+	refresh *postgres.RefreshTokenRepo,
 	sender EmailSender,
 	publicBaseURL string,
 	hooks EmailHooks,

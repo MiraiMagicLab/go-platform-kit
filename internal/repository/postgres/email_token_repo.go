@@ -65,3 +65,4 @@ func (r *EmailTokenRepo) Cleanup(ctx context.Context, now time.Time) error {
 	`, now)
 	return err
 }
+

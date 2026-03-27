@@ -7,8 +7,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/MiraiMagicLab/go-auth-lib/internal/repository"
 )
 
 type MFARepo struct {
@@ -27,8 +25,8 @@ func (r *MFARepo) UpsertTOTPSecret(ctx context.Context, userID uuid.UUID, secret
 	return err
 }
 
-func (r *MFARepo) GetMFA(ctx context.Context, userID uuid.UUID) (repository.MFADTO, bool, error) {
-	var m repository.MFADTO
+func (r *MFARepo) GetMFA(ctx context.Context, userID uuid.UUID) (MFADTO, bool, error) {
+	var m MFADTO
 	err := r.db.QueryRow(ctx, `
 		select user_id, totp_secret, enabled, enabled_at, created_at
 		from user_mfa
@@ -36,9 +34,9 @@ func (r *MFARepo) GetMFA(ctx context.Context, userID uuid.UUID) (repository.MFAD
 	`, userID).Scan(&m.UserID, &m.TOTPSecret, &m.Enabled, &m.EnabledAt, &m.CreatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return repository.MFADTO{}, false, nil
+			return MFADTO{}, false, nil
 		}
-		return repository.MFADTO{}, false, err
+		return MFADTO{}, false, err
 	}
 	return m, true, nil
 }
@@ -126,3 +124,4 @@ func (r *MFARepo) Cleanup(ctx context.Context, now time.Time) error {
 	`, now)
 	return err
 }
+

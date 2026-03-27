@@ -7,16 +7,16 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/MiraiMagicLab/go-auth-lib/internal/repository"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/repository/postgres"
 )
 
 type RBACService struct {
-	repo     repository.RBACRepository
+	repo     *postgres.RBACRepo
 	cache    StringSliceCache
 	cacheTTL time.Duration
 }
 
-func NewRBACService(repo repository.RBACRepository, cache StringSliceCache, cacheTTL time.Duration) *RBACService {
+func NewRBACService(repo *postgres.RBACRepo, cache StringSliceCache, cacheTTL time.Duration) *RBACService {
 	if cache == nil {
 		cache = NoopStringSliceCache{}
 	}

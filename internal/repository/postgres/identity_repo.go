@@ -40,3 +40,4 @@ func (r *IdentityRepo) LinkIdentity(ctx context.Context, userID uuid.UUID, provi
 	`, userID, provider, providerSubject, email)
 	return err
 }
+

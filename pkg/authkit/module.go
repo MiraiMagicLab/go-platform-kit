@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/oauth2"
@@ -106,6 +107,29 @@ type Module struct {
 	redis         *redis.Client
 	cfg           Config
 	commonMounted bool
+}
+
+// AuthMiddleware returns the JWT auth middleware for protecting host app routes.
+// Usage: `r.GET("/path", mod.AuthMiddleware(), handler)`
+func (m *Module) AuthMiddleware() gin.HandlerFunc { return m.authMW }
+
+// RequirePermission returns a middleware that checks a dynamic RBAC permission string.
+// Usage: `r.GET("/path", mod.AuthMiddleware(), mod.RequirePermission("vocab.read"), handler)`
+func (m *Module) RequirePermission(permission string) gin.HandlerFunc {
+	return middleware.RequirePermission(m.rbacSvc, permission)
+}
+
+// RequireRBACAdmin returns a middleware that checks `cfg.RBACAdminPermission` (default: "rbac.manage").
+func (m *Module) RequireRBACAdmin() gin.HandlerFunc {
+	return middleware.RequirePermission(m.rbacSvc, m.cfg.RBACAdminPermission)
+}
+
+// UserIDFromCtx exposes the authenticated user id from Gin context (set by AuthMiddleware()).
+func UserIDFromCtx(c *gin.Context) (uuid.UUID, bool) { return middleware.UserIDFromCtx(c) }
+
+// AccessTokenMetaFromCtx exposes access token metadata (jti, exp) from Gin context (set by AuthMiddleware()).
+func AccessTokenMetaFromCtx(c *gin.Context) (string, time.Time, bool) {
+	return middleware.AccessTokenMetaFromCtx(c)
 }
 
 // MountOptions provides fine-grained control over which endpoints are mounted.

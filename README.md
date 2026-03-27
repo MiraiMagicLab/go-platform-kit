@@ -75,6 +75,27 @@ opt.OAuth = false                  // disable OAuth routes
 mod.MountWithOptions(g, opt)
 ```
 
+### Use authkit middleware in your host app routes
+
+You can protect your own (non-authkit) routes using authkit's exported middlewares:
+
+```go
+// protect with JWT auth
+r.GET("/api/me", mod.AuthMiddleware(), func(c *gin.Context) {
+  uid, ok := authkit.UserIDFromCtx(c)
+  if !ok {
+    c.AbortWithStatus(401)
+    return
+  }
+  c.JSON(200, gin.H{"user_id": uid.String()})
+})
+
+// protect with JWT + dynamic RBAC permission (permission string is stored in DB)
+r.POST("/api/vocab", mod.AuthMiddleware(), mod.RequirePermission("vocab.create"), func(c *gin.Context) {
+  c.JSON(200, gin.H{"ok": true})
+})
+```
+
 ### Customization (library-style)
 
 - Keep core auth logic consistent; customize via `authkit.Config` and `authkit.Hooks`.

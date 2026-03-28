@@ -8,18 +8,19 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/MiraiMagicLab/go-auth-lib/pkg/response"
 	"github.com/MiraiMagicLab/go-auth-lib/internal/service"
+	"github.com/MiraiMagicLab/go-auth-lib/pkg/response"
 )
 
 type OAuthHandler struct {
-	oauth *service.OAuthService
-	auth  *service.AuthService
+	oauth     *service.OAuthService
+	auth      *service.AuthService
+	lifecycle *AuthLifecycle
 }
 
-func NewOAuthHandler(oauth *service.OAuthService, auth *service.AuthService, publicBaseURL string) *OAuthHandler {
+func NewOAuthHandler(oauth *service.OAuthService, auth *service.AuthService, publicBaseURL string, lifecycle *AuthLifecycle) *OAuthHandler {
 	_ = publicBaseURL
-	return &OAuthHandler{oauth: oauth, auth: auth}
+	return &OAuthHandler{oauth: oauth, auth: auth, lifecycle: lifecycle}
 }
 
 func (h *OAuthHandler) Login(c *gin.Context) {
@@ -63,6 +64,7 @@ func (h *OAuthHandler) Callback(c *gin.Context) {
 		return
 	}
 
+	fireAfterSessionIssued(h.lifecycle, "oauth", userID, nil, c.ClientIP(), c.Request.UserAgent())
 	// For service-to-service usage, return JSON. You can also redirect to a frontend and pass tokens another way.
 	response.Success(c, http.StatusOK, "OAuth login success", session)
 }

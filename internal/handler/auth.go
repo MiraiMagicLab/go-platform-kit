@@ -13,15 +13,16 @@ import (
 )
 
 type AuthHandler struct {
-	auth  *service.AuthService
-	email *service.EmailService
-	rbac  *service.RBACService
-	users *postgres.UserRepo
-	audit *service.AuditService
+	auth      *service.AuthService
+	email     *service.EmailService
+	rbac      *service.RBACService
+	users     *postgres.UserRepo
+	audit     *service.AuditService
+	lifecycle *AuthLifecycle
 }
 
-func NewAuthHandler(auth *service.AuthService, email *service.EmailService, rbac *service.RBACService, users *postgres.UserRepo, audit *service.AuditService) *AuthHandler {
-	return &AuthHandler{auth: auth, email: email, rbac: rbac, users: users, audit: audit}
+func NewAuthHandler(auth *service.AuthService, email *service.EmailService, rbac *service.RBACService, users *postgres.UserRepo, audit *service.AuditService, lifecycle *AuthLifecycle) *AuthHandler {
+	return &AuthHandler{auth: auth, email: email, rbac: rbac, users: users, audit: audit, lifecycle: lifecycle}
 }
 
 type registerReq struct {
@@ -50,6 +51,8 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 	h.audit.Log(c.Request.Context(), &id, "auth.register", "success", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"email": req.Email})
+	email := req.Email
+	fireAfterSessionIssued(h.lifecycle, "register", id, &email, c.ClientIP(), c.Request.UserAgent())
 	response.Success(c, http.StatusCreated, "User registered", gin.H{"id": id.String()})
 }
 
@@ -87,6 +90,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 	h.audit.Log(c.Request.Context(), &res.UserID, "auth.login", "success", c.ClientIP(), c.Request.UserAgent(), nil)
+	email := req.Email
+	fireAfterSessionIssued(h.lifecycle, "login", res.UserID, &email, c.ClientIP(), c.Request.UserAgent())
 	response.Success(c, http.StatusOK, "Login success", res)
 }
 
@@ -126,6 +131,7 @@ func (h *AuthHandler) CompleteMFA(c *gin.Context) {
 		return
 	}
 	h.audit.Log(c.Request.Context(), &res.UserID, "auth.mfa_complete", "success", c.ClientIP(), c.Request.UserAgent(), nil)
+	fireAfterSessionIssued(h.lifecycle, "mfa_complete", res.UserID, nil, c.ClientIP(), c.Request.UserAgent())
 	response.Success(c, http.StatusOK, "MFA verification success", res)
 }
 

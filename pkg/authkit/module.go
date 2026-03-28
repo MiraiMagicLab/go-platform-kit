@@ -311,10 +311,20 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 	}
 	oauthSvc := service.NewOAuthService(identityRepo, userRepo, googleCfg, facebookCfg)
 
-	authH := handler.NewAuthHandler(authSvc, emailSvc, rbacSvc, userRepo, auditSvc)
+	var authLC *handler.AuthLifecycle
+	if cfg.Hooks.AfterSessionIssued != nil {
+		hook := cfg.Hooks.AfterSessionIssued
+		authLC = &handler.AuthLifecycle{
+			AfterSessionIssued: func(ctx context.Context, reason string, userID uuid.UUID, email *string, ip, ua string) {
+				hook(ctx, SessionIssuedReason(reason), userID, email, ip, ua)
+			},
+		}
+	}
+
+	authH := handler.NewAuthHandler(authSvc, emailSvc, rbacSvc, userRepo, auditSvc, authLC)
 	rbacH := handler.NewRBACHandler(rbacSvc, userAdminSvc, auditSvc)
 	mfaH := handler.NewMFAHandler(mfaSvc, auditSvc)
-	oauthH := handler.NewOAuthHandler(oauthSvc, authSvc, cfg.PublicBaseURL)
+	oauthH := handler.NewOAuthHandler(oauthSvc, authSvc, cfg.PublicBaseURL, authLC)
 
 	authMW := middleware.JWTAuth(jwtm, userRepo, func(ctx *gin.Context, jti string) (bool, error) {
 		return denylist.IsDenied(ctx.Request.Context(), jti)

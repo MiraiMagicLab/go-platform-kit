@@ -1,4 +1,4 @@
-package handler
+package controllers
 
 import (
 	"crypto/rand"
@@ -8,23 +8,23 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/MiraiMagicLab/go-auth-lib/internal/service"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/services"
 	"github.com/MiraiMagicLab/go-auth-lib/pkg/response"
 )
 
 type OAuthHandler struct {
-	oauth     *service.OAuthService
-	auth      *service.AuthService
+	oauth     *services.OAuthService
+	auth      *services.AuthService
 	lifecycle *AuthLifecycle
 }
 
-func NewOAuthHandler(oauth *service.OAuthService, auth *service.AuthService, publicBaseURL string, lifecycle *AuthLifecycle) *OAuthHandler {
+func NewOAuthHandler(oauth *services.OAuthService, auth *services.AuthService, publicBaseURL string, lifecycle *AuthLifecycle) *OAuthHandler {
 	_ = publicBaseURL
 	return &OAuthHandler{oauth: oauth, auth: auth, lifecycle: lifecycle}
 }
 
 func (h *OAuthHandler) Login(c *gin.Context) {
-	provider := service.OAuthProvider(strings.ToLower(c.Param("provider")))
+	provider := services.OAuthProvider(strings.ToLower(c.Param("provider")))
 	state := randomHex(16)
 	c.SetCookie("oauth_state", state, 300, "/", "", false, true)
 
@@ -37,7 +37,7 @@ func (h *OAuthHandler) Login(c *gin.Context) {
 }
 
 func (h *OAuthHandler) Callback(c *gin.Context) {
-	provider := service.OAuthProvider(strings.ToLower(c.Param("provider")))
+	provider := services.OAuthProvider(strings.ToLower(c.Param("provider")))
 	code := c.Query("code")
 	state := c.Query("state")
 	stored, err := c.Cookie("oauth_state")

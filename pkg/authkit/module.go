@@ -16,11 +16,11 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 
-	"github.com/MiraiMagicLab/go-auth-lib/internal/handler"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/controllers"
 	"github.com/MiraiMagicLab/go-auth-lib/internal/middleware"
-	"github.com/MiraiMagicLab/go-auth-lib/internal/repository/postgres"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/repositories/postgres"
 	"github.com/MiraiMagicLab/go-auth-lib/internal/security"
-	"github.com/MiraiMagicLab/go-auth-lib/internal/service"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/services"
 	"github.com/MiraiMagicLab/go-auth-lib/pkg/token"
 )
 
@@ -96,14 +96,14 @@ func DefaultConfig() Config {
 }
 
 type Module struct {
-	authH  *handler.AuthHandler
-	rbacH  *handler.RBACHandler
-	mfaH   *handler.MFAHandler
-	oauthH *handler.OAuthHandler
+	authH  *controllers.AuthHandler
+	rbacH  *controllers.RBACHandler
+	mfaH   *controllers.MFAHandler
+	oauthH *controllers.OAuthHandler
 
 	authMW        gin.HandlerFunc
-	rbacSvc       *service.RBACService
-	cleanup       *service.CleanupService
+	rbacSvc       *services.RBACService
+	cleanup       *services.CleanupService
 	redis         *redis.Client
 	cfg           Config
 	commonMounted bool
@@ -238,11 +238,11 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 
 	jwtm := token.NewJWTManager(cfg.JWTAccessSecret, cfg.JWTRefreshSecret, cfg.Issuer)
 
-	var permCache service.StringSliceCache = service.NoopStringSliceCache{}
-	var denylist service.AccessTokenDenylist = service.NoopAccessTokenDenylist{}
+	var permCache services.StringSliceCache = services.NoopStringSliceCache{}
+	var denylist services.AccessTokenDenylist = services.NoopAccessTokenDenylist{}
 	if redisClient != nil {
-		permCache = service.NewRedisStringSliceCache(redisClient)
-		denylist = service.NewRedisAccessTokenDenylist(redisClient)
+		permCache = services.NewRedisStringSliceCache(redisClient)
+		denylist = services.NewRedisAccessTokenDenylist(redisClient)
 	}
 
 	var mfaCipher *security.StringCipher
@@ -257,23 +257,23 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 		}
 	}
 
-	rbacSvc := service.NewRBACService(rbacRepo, permCache, cfg.PermissionsCacheTTL)
-	userAdminSvc := service.NewUserAdminService(userRepo, refreshRepo)
-	mfaSvc := service.NewMFAService(mfaRepo, cfg.Issuer, mfaCipher)
-	auditSvc := service.NewAuditService(auditRepo)
-	cleanupSvc := service.NewCleanupService(refreshRepo, mfaRepo, emailTokenRepo)
+	rbacSvc := services.NewRBACService(rbacRepo, permCache, cfg.PermissionsCacheTTL)
+	userAdminSvc := services.NewUserAdminService(userRepo, refreshRepo)
+	mfaSvc := services.NewMFAService(mfaRepo, cfg.Issuer, mfaCipher)
+	auditSvc := services.NewAuditService(auditRepo)
+	cleanupSvc := services.NewCleanupService(refreshRepo, mfaRepo, emailTokenRepo)
 
-	var sender service.EmailSender
+	var sender services.EmailSender
 	if cfg.SMTPHost != "" && cfg.SMTPUser != "" && cfg.SMTPPass != "" && cfg.SMTPFrom != "" {
-		sender = service.NewSMTPSender(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPFrom)
+		sender = services.NewSMTPSender(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPFrom)
 	}
-	emailSvc := service.NewEmailService(userRepo, emailTokenRepo, refreshRepo, sender, cfg.PublicBaseURL, service.EmailHooks{
+	emailSvc := services.NewEmailService(userRepo, emailTokenRepo, refreshRepo, sender, cfg.PublicBaseURL, services.EmailHooks{
 		BuildVerifyEmailLink:   cfg.Hooks.BuildVerifyEmailLink,
 		BuildResetPasswordLink: cfg.Hooks.BuildResetPasswordLink,
 		RenderVerifyEmail:      cfg.Hooks.RenderVerifyEmail,
 		RenderResetPassword:    cfg.Hooks.RenderResetPassword,
 	})
-	authSvc := service.NewAuthService(
+	authSvc := services.NewAuthService(
 		userRepo,
 		refreshRepo,
 		mfaRepo,
@@ -309,22 +309,22 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 			Scopes: []string{"email"},
 		}
 	}
-	oauthSvc := service.NewOAuthService(identityRepo, userRepo, googleCfg, facebookCfg)
+	oauthSvc := services.NewOAuthService(identityRepo, userRepo, googleCfg, facebookCfg)
 
-	var authLC *handler.AuthLifecycle
+	var authLC *controllers.AuthLifecycle
 	if cfg.Hooks.AfterSessionIssued != nil {
 		hook := cfg.Hooks.AfterSessionIssued
-		authLC = &handler.AuthLifecycle{
+		authLC = &controllers.AuthLifecycle{
 			AfterSessionIssued: func(ctx context.Context, reason string, userID uuid.UUID, email *string, ip, ua string) {
 				hook(ctx, SessionIssuedReason(reason), userID, email, ip, ua)
 			},
 		}
 	}
 
-	authH := handler.NewAuthHandler(authSvc, emailSvc, rbacSvc, userRepo, auditSvc, authLC)
-	rbacH := handler.NewRBACHandler(rbacSvc, userAdminSvc, auditSvc)
-	mfaH := handler.NewMFAHandler(mfaSvc, auditSvc)
-	oauthH := handler.NewOAuthHandler(oauthSvc, authSvc, cfg.PublicBaseURL, authLC)
+	authH := controllers.NewAuthHandler(authSvc, emailSvc, rbacSvc, userRepo, auditSvc, authLC)
+	rbacH := controllers.NewRBACHandler(rbacSvc, userAdminSvc, auditSvc)
+	mfaH := controllers.NewMFAHandler(mfaSvc, auditSvc)
+	oauthH := controllers.NewOAuthHandler(oauthSvc, authSvc, cfg.PublicBaseURL, authLC)
 
 	authMW := middleware.JWTAuth(jwtm, userRepo, func(ctx *gin.Context, jti string) (bool, error) {
 		return denylist.IsDenied(ctx.Request.Context(), jti)

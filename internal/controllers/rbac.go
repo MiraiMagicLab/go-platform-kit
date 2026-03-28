@@ -1,4 +1,4 @@
-package handler
+package controllers
 
 import (
 	"net/http"
@@ -8,16 +8,16 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/MiraiMagicLab/go-auth-lib/pkg/response"
-	"github.com/MiraiMagicLab/go-auth-lib/internal/service"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/services"
 )
 
 type RBACHandler struct {
-	rbac  *service.RBACService
-	admin *service.UserAdminService
-	audit *service.AuditService
+	rbac  *services.RBACService
+	admin *services.UserAdminService
+	audit *services.AuditService
 }
 
-func NewRBACHandler(rbac *service.RBACService, admin *service.UserAdminService, audit *service.AuditService) *RBACHandler {
+func NewRBACHandler(rbac *services.RBACService, admin *services.UserAdminService, audit *services.AuditService) *RBACHandler {
 	return &RBACHandler{rbac: rbac, admin: admin, audit: audit}
 }
 

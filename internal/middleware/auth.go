@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/MiraiMagicLab/go-auth-lib/internal/repository/postgres"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/repositories/postgres"
 	"github.com/MiraiMagicLab/go-auth-lib/pkg/response"
 	"github.com/MiraiMagicLab/go-auth-lib/pkg/token"
 )

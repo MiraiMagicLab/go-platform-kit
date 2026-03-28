@@ -1,4 +1,4 @@
-package service
+package services
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 
-	"github.com/MiraiMagicLab/go-auth-lib/internal/repository/postgres"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/repositories/postgres"
 )
 
 var ErrMFARequired = errors.New("mfa required")

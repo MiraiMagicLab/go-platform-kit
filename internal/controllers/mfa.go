@@ -1,4 +1,4 @@
-package handler
+package controllers
 
 import (
 	"net/http"
@@ -7,15 +7,15 @@ import (
 
 	"github.com/MiraiMagicLab/go-auth-lib/internal/middleware"
 	"github.com/MiraiMagicLab/go-auth-lib/pkg/response"
-	"github.com/MiraiMagicLab/go-auth-lib/internal/service"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/services"
 )
 
 type MFAHandler struct {
-	mfa   *service.MFAService
-	audit *service.AuditService
+	mfa   *services.MFAService
+	audit *services.AuditService
 }
 
-func NewMFAHandler(mfa *service.MFAService, audit *service.AuditService) *MFAHandler {
+func NewMFAHandler(mfa *services.MFAService, audit *services.AuditService) *MFAHandler {
 	return &MFAHandler{mfa: mfa, audit: audit}
 }
 

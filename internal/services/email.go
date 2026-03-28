@@ -1,4 +1,4 @@
-package service
+package services
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/MiraiMagicLab/go-auth-lib/internal/repository/postgres"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/repositories/postgres"
 )
 
 const (

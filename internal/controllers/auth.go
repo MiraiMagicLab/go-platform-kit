@@ -1,4 +1,4 @@
-package handler
+package controllers
 
 import (
 	"net/http"
@@ -7,21 +7,21 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/MiraiMagicLab/go-auth-lib/internal/middleware"
-	"github.com/MiraiMagicLab/go-auth-lib/internal/repository/postgres"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/repositories/postgres"
 	"github.com/MiraiMagicLab/go-auth-lib/pkg/response"
-	"github.com/MiraiMagicLab/go-auth-lib/internal/service"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/services"
 )
 
 type AuthHandler struct {
-	auth      *service.AuthService
-	email     *service.EmailService
-	rbac      *service.RBACService
+	auth      *services.AuthService
+	email     *services.EmailService
+	rbac      *services.RBACService
 	users     *postgres.UserRepo
-	audit     *service.AuditService
+	audit     *services.AuditService
 	lifecycle *AuthLifecycle
 }
 
-func NewAuthHandler(auth *service.AuthService, email *service.EmailService, rbac *service.RBACService, users *postgres.UserRepo, audit *service.AuditService, lifecycle *AuthLifecycle) *AuthHandler {
+func NewAuthHandler(auth *services.AuthService, email *services.EmailService, rbac *services.RBACService, users *postgres.UserRepo, audit *services.AuditService, lifecycle *AuthLifecycle) *AuthHandler {
 	return &AuthHandler{auth: auth, email: email, rbac: rbac, users: users, audit: audit, lifecycle: lifecycle}
 }
 
@@ -69,7 +69,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 	res, err := h.auth.Login(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
-		if b, ok := err.(service.ErrUserBanned); ok {
+		if b, ok := err.(services.ErrUserBanned); ok {
 			params := map[string]interface{}{}
 			if b.Until != nil {
 				params["banned_until"] = b.Until.UTC().Format("2006-01-02T15:04:05Z")
@@ -80,7 +80,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			response.Fail(c, http.StatusForbidden, response.CodeAuthUserBanned, response.DefaultMessage(response.CodeAuthUserBanned), params)
 			return
 		}
-		if _, ok := err.(service.ErrEmailNotVerified); ok {
+		if _, ok := err.(services.ErrEmailNotVerified); ok {
 			response.FailCode(c, http.StatusForbidden, response.CodeAuthEmailNotVerified)
 			h.audit.Log(c.Request.Context(), nil, "auth.login", "failed", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"email": req.Email})
 			return

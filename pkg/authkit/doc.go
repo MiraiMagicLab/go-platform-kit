@@ -10,11 +10,11 @@
 //
 // internal/ — implementation, không import từ repo ngoài module:
 //
-//	internal/handler          — HTTP handlers Gin
+//	internal/controllers    — HTTP handlers Gin (tương đương controllers trong plugNmeet-server/pkg)
 //	internal/middleware     — JWT, RBAC, rate limit, observability
-//	internal/service        — nghiệp vụ
-//	internal/repository/postgres — truy cập DB
-//	internal/db, internal/config, internal/model, internal/security
+//	internal/services       — nghiệp vụ
+//	internal/repositories/postgres — truy cập DB
+//	internal/db, internal/config, internal/models, internal/security
 //
 // Schema & ví dụ:
 //

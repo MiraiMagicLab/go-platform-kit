@@ -1,4 +1,4 @@
-package service
+package services
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 
-	"github.com/MiraiMagicLab/go-auth-lib/internal/repository/postgres"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/repositories/postgres"
 )
 
 var ErrOAuthNotConfigured = errors.New("oauth not configured")

@@ -1,10 +1,10 @@
-package service
+package services
 
 import (
 	"context"
 	"time"
 
-	"github.com/MiraiMagicLab/go-auth-lib/internal/repository/postgres"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/repositories/postgres"
 )
 
 type CleanupService struct {

@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/MiraiMagicLab/go-auth-lib/internal/middleware"
-	"github.com/MiraiMagicLab/go-auth-lib/internal/response"
+	"github.com/MiraiMagicLab/go-auth-lib/pkg/response"
 	"github.com/MiraiMagicLab/go-auth-lib/internal/service"
 )
 

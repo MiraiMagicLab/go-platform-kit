@@ -34,6 +34,7 @@ const (
 	CodeCommonBadRequest      = "common.bad_request"
 	CodeCommonInternal        = "common.internal_error"
 	CodeCommonTooManyRequests = "common.too_many_requests"
+	CodeCommonNotFound        = "common.not_found"
 )
 
 var defaultMessages = map[string]string{
@@ -70,6 +71,7 @@ var defaultMessages = map[string]string{
 	CodeCommonBadRequest:      "Invalid request body",
 	CodeCommonInternal:        "Internal server error",
 	CodeCommonTooManyRequests: "Too many requests, please try again later",
+	CodeCommonNotFound:        "Not found",
 
 	// Example for positional placeholder support.
 	"test.multi_param": "Hello {0}, you have {1} new messages in your {2} bucket.",
@@ -81,4 +83,15 @@ func DefaultMessage(code string) string {
 	}
 	// Fallback requested by user: use code itself as message.
 	return code
+}
+
+// MergeDefaultMessages registers additional errorCode -> defaultMessage entries
+// for host applications (e.g. lingo-engine) so FailCode can resolve user-facing text.
+func MergeDefaultMessages(extra map[string]string) {
+	for k, v := range extra {
+		if k == "" || v == "" {
+			continue
+		}
+		defaultMessages[k] = v
+	}
 }

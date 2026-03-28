@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/MiraiMagicLab/go-auth-lib/internal/response"
+	"github.com/MiraiMagicLab/go-auth-lib/pkg/response"
 )
 
 type inMemCounter struct {

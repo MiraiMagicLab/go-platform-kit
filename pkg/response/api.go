@@ -2,6 +2,7 @@ package response
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -68,4 +69,9 @@ func RenderMessage(template string, args ...interface{}) string {
 		out = strings.ReplaceAll(out, fmt.Sprintf("{%d}", i), fmt.Sprint(v))
 	}
 	return out
+}
+
+// FailNotFound responds with 404 and the standard not-found code (same shape as other FailCode responses).
+func FailNotFound(c *gin.Context) {
+	FailCode(c, http.StatusNotFound, CodeCommonNotFound)
 }

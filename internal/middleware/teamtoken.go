@@ -11,6 +11,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/MicahParks/keyfunc"
+
+	"github.com/MiraiMagicLab/go-auth-lib/pkg/response"
 )
 
 // TeamClaims is the control-plane-issued JWT used for admin SSO (TeamToken).
@@ -52,7 +54,8 @@ func (v *TeamTokenVerifier) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authz := c.GetHeader("Authorization")
 		if !strings.HasPrefix(strings.ToLower(authz), "bearer ") {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"success": false, "message": "missing bearer token"})
+			response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, "missing bearer token", nil)
+			c.Abort()
 			return
 		}
 
@@ -61,22 +64,26 @@ func (v *TeamTokenVerifier) Middleware() gin.HandlerFunc {
 		claims := &TeamClaims{}
 		tok, err := jwt.ParseWithClaims(raw, claims, v.jwks.Keyfunc)
 		if err != nil || tok == nil || !tok.Valid {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"success": false, "message": "invalid token"})
+			response.Fail(c, http.StatusUnauthorized, response.CodeAuthInvalidToken, "invalid token", nil)
+			c.Abort()
 			return
 		}
 
 		if claims.Issuer != v.issuer {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"success": false, "message": "invalid issuer"})
+			response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, "invalid issuer", nil)
+			c.Abort()
 			return
 		}
 		if !audContains(claims.Audience, v.aud) {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"success": false, "message": "invalid audience"})
+			response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, "invalid audience", nil)
+			c.Abort()
 			return
 		}
 
 		subjectUUID, err := uuid.Parse(claims.Subject)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"success": false, "message": "invalid subject"})
+			response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, "invalid subject", nil)
+			c.Abort()
 			return
 		}
 

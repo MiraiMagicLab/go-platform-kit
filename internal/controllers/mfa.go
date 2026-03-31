@@ -33,7 +33,7 @@ func (h *MFAHandler) Setup(c *gin.Context) {
 		return
 	}
 	h.audit.Log(c.Request.Context(), &userID, "mfa.setup", "success", c.ClientIP(), c.Request.UserAgent(), nil)
-	response.Success(c, http.StatusOK, "MFA setup initialized", out)
+	response.Success(c, http.StatusOK, "common.ok", "MFA setup initialized", out, nil)
 }
 
 type mfaEnableReq struct {
@@ -57,7 +57,7 @@ func (h *MFAHandler) Enable(c *gin.Context) {
 		return
 	}
 	h.audit.Log(c.Request.Context(), &userID, "mfa.enable", "success", c.ClientIP(), c.Request.UserAgent(), nil)
-	response.Success(c, http.StatusOK, "MFA enabled", gin.H{"ok": true})
+	response.Success(c, http.StatusOK, "common.ok", "MFA enabled", gin.H{"ok": true}, nil)
 }
 
 func (h *MFAHandler) Disable(c *gin.Context) {
@@ -72,5 +72,5 @@ func (h *MFAHandler) Disable(c *gin.Context) {
 		return
 	}
 	h.audit.Log(c.Request.Context(), &userID, "mfa.disable", "success", c.ClientIP(), c.Request.UserAgent(), nil)
-	response.Success(c, http.StatusOK, "MFA disabled", gin.H{"ok": true})
+	response.Success(c, http.StatusOK, "common.ok", "MFA disabled", gin.H{"ok": true}, nil)
 }

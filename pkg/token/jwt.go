@@ -116,3 +116,7 @@ func (m *JWTManager) parse(tokenStr string, secret []byte, expectedType TokenTyp
 	}
 	return claims, nil
 }
+
+func IsExpired(err error) bool {
+	return errors.Is(err, jwt.ErrTokenExpired)
+}

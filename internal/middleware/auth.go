@@ -73,7 +73,11 @@ func JWTAuth(jwtm *token.JWTManager, users *postgres.UserRepo, denylistFn func(c
 
 		claims, err := jwtm.ParseAccess(raw)
 		if err != nil {
-			response.FailCode(c, http.StatusUnauthorized, response.CodeAuthInvalidToken)
+			if token.IsExpired(err) {
+				response.FailCode(c, http.StatusUnauthorized, response.CodeAuthTokenExpired)
+			} else {
+				response.FailCode(c, http.StatusUnauthorized, response.CodeAuthInvalidToken)
+			}
 			c.Abort()
 			return
 		}

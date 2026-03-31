@@ -203,19 +203,16 @@ All non-redirect API endpoints return a standard envelope:
 ```json
 {
   "success": true,
+  "code": "common.ok",
   "message": "Login success",
-  "errorMessage": {
-    "errorCode": "auth.invalid_email",
-    "message": "Invalid email format",
-    "params": {}
-  },
+  "params": {},
   "data": {}
 }
 ```
 
 - `message` is fallback English text.
-- `errorMessage.errorCode` is stable i18n key for client-side translation.
-- Frontend/mobile can map `errorCode` to localized text by user locale.
+- `code` is stable i18n key for client-side translation.
+- Frontend/mobile can map `code` to localized text by user locale.
 
 This project now focuses on embedded library mode only (no standalone microservice SDK client).
 

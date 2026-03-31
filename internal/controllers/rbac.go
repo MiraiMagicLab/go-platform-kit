@@ -36,7 +36,7 @@ func (h *RBACHandler) CreateRole(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, response.CodeRBACCreateRoleFailed, "Could not create role", nil)
 		return
 	}
-	response.Success(c, http.StatusCreated, "Role created", gin.H{"id": id.String()})
+	response.Success(c, http.StatusCreated, "common.created", "Role created", gin.H{"id": id.String()}, nil)
 }
 
 type createPermissionReq struct {
@@ -54,7 +54,7 @@ func (h *RBACHandler) CreatePermission(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, response.CodeRBACCreatePermissionFailed, "Could not create permission", nil)
 		return
 	}
-	response.Success(c, http.StatusCreated, "Permission created", gin.H{"id": id.String()})
+	response.Success(c, http.StatusCreated, "common.created", "Permission created", gin.H{"id": id.String()}, nil)
 }
 
 type assignRolePermsReq struct {
@@ -85,7 +85,7 @@ func (h *RBACHandler) AssignPermissionsToRole(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, response.CodeRBACAssignFailed, "Could not assign permissions", nil)
 		return
 	}
-	response.Success(c, http.StatusOK, "Permissions assigned", gin.H{"ok": true})
+	response.Success(c, http.StatusOK, "common.ok", "Permissions assigned", gin.H{"ok": true}, nil)
 }
 
 type assignUserRolesReq struct {
@@ -116,7 +116,7 @@ func (h *RBACHandler) AssignRolesToUser(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, response.CodeRBACAssignFailed, "Could not assign roles", nil)
 		return
 	}
-	response.Success(c, http.StatusOK, "Roles assigned", gin.H{"ok": true})
+	response.Success(c, http.StatusOK, "common.ok", "Roles assigned", gin.H{"ok": true}, nil)
 }
 
 type banUserReq struct {
@@ -150,7 +150,7 @@ func (h *RBACHandler) BanUser(c *gin.Context) {
 		}
 		return
 	}
-	response.Success(c, http.StatusOK, "User banned", gin.H{"ok": true, "banned_until": until.UTC().Format(time.RFC3339)})
+	response.Success(c, http.StatusOK, "common.ok", "User banned", gin.H{"ok": true, "banned_until": until.UTC().Format(time.RFC3339)}, nil)
 	if h.audit != nil {
 		h.audit.Log(c.Request.Context(), &userID, "auth.user_ban", "success", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"banned_until": until.UTC().Format(time.RFC3339), "reason": req.Reason})
 	}
@@ -169,7 +169,7 @@ func (h *RBACHandler) UnbanUser(c *gin.Context) {
 		}
 		return
 	}
-	response.Success(c, http.StatusOK, "User unbanned", gin.H{"ok": true})
+	response.Success(c, http.StatusOK, "common.ok", "User unbanned", gin.H{"ok": true}, nil)
 	if h.audit != nil {
 		h.audit.Log(c.Request.Context(), &userID, "auth.user_unban", "success", c.ClientIP(), c.Request.UserAgent(), nil)
 	}

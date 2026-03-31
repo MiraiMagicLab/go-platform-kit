@@ -5,6 +5,7 @@ const (
 	CodeAuthInvalidEmail        = "auth.invalid_email"
 	CodeAuthInvalidPassword     = "auth.invalid_password"
 	CodeAuthInvalidToken        = "auth.invalid_token"
+	CodeAuthTokenExpired        = "auth.token_expired"
 	CodeAuthTokenRevoked        = "auth.token_revoked"
 	CodeAuthUnauthorized        = "auth.unauthorized"
 	CodeAuthForbidden           = "auth.forbidden"
@@ -42,6 +43,7 @@ var defaultMessages = map[string]string{
 	CodeAuthInvalidEmail:        "Invalid email format",
 	CodeAuthInvalidPassword:     "Password must be at least 8 characters",
 	CodeAuthInvalidToken:        "Invalid token",
+	CodeAuthTokenExpired:        "Token expired",
 	CodeAuthTokenRevoked:        "Token revoked",
 	CodeAuthUnauthorized:        "Unauthorized",
 	CodeAuthForbidden:           "Forbidden",
@@ -85,7 +87,7 @@ func DefaultMessage(code string) string {
 	return code
 }
 
-// MergeDefaultMessages registers additional errorCode -> defaultMessage entries
+// MergeDefaultMessages registers additional code -> defaultMessage entries
 // for host applications (e.g. lingo-engine) so FailCode can resolve user-facing text.
 func MergeDefaultMessages(extra map[string]string) {
 	for k, v := range extra {

@@ -8,24 +8,24 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type ErrorMessage struct {
-	ErrorCode string                 `json:"errorCode"`
-	Message   string                 `json:"message"`
-	Params    map[string]interface{} `json:"params,omitempty"`
-}
-
 type ApiResponse struct {
-	Success      bool          `json:"success"`
-	Message      string        `json:"message,omitempty"`
-	ErrorMessage *ErrorMessage `json:"errorMessage,omitempty"`
-	Data         interface{}   `json:"data,omitempty"`
+	Success     bool                   `json:"success"`
+	CodeMessage string                 `json:"codeMessage"`
+	Message     string                 `json:"message,omitempty"`
+	Params      map[string]interface{} `json:"params,omitempty"`
+	Data        interface{}            `json:"data,omitempty"`
 }
 
-func Success(c *gin.Context, status int, message string, data interface{}) {
+func Success(c *gin.Context, status int, code, message string, data interface{}, params map[string]interface{}) {
+	if code == "" {
+		code = "common.ok"
+	}
 	c.JSON(status, ApiResponse{
-		Success: true,
-		Message: message,
-		Data:    data,
+		Success:     true,
+		CodeMessage: code,
+		Message:     message,
+		Params:      params,
+		Data:        data,
 	})
 }
 
@@ -33,14 +33,14 @@ func Fail(c *gin.Context, status int, code, fallbackMessage string, params map[s
 	if fallbackMessage == "" {
 		fallbackMessage = DefaultMessage(code)
 	}
+	if code == "" {
+		code = "common.unknown_error"
+	}
 	c.JSON(status, ApiResponse{
-		Success: false,
-		Message: fallbackMessage,
-		ErrorMessage: &ErrorMessage{
-			ErrorCode: code,
-			Message:   fallbackMessage,
-			Params:    params,
-		},
+		Success:     false,
+		CodeMessage: code,
+		Message:     fallbackMessage,
+		Params:      params,
 	})
 }
 

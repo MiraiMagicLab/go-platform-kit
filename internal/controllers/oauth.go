@@ -66,7 +66,7 @@ func (h *OAuthHandler) Callback(c *gin.Context) {
 
 	fireAfterSessionIssued(h.lifecycle, "oauth", userID, nil, c.ClientIP(), c.Request.UserAgent())
 	// For service-to-service usage, return JSON. You can also redirect to a frontend and pass tokens another way.
-	response.Success(c, http.StatusOK, "OAuth login success", session)
+	response.Success(c, http.StatusOK, "common.ok", "OAuth login success", session, nil)
 }
 
 func randomHex(nBytes int) string {

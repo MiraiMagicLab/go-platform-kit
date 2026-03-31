@@ -53,7 +53,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	h.audit.Log(c.Request.Context(), &id, "auth.register", "success", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"email": req.Email})
 	email := req.Email
 	fireAfterSessionIssued(h.lifecycle, "register", id, &email, c.ClientIP(), c.Request.UserAgent())
-	response.Success(c, http.StatusCreated, "User registered", gin.H{"id": id.String()})
+	response.Success(c, http.StatusCreated, "common.created", "User registered", gin.H{"id": id.String()}, nil)
 }
 
 type loginReq struct {
@@ -92,7 +92,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	h.audit.Log(c.Request.Context(), &res.UserID, "auth.login", "success", c.ClientIP(), c.Request.UserAgent(), nil)
 	email := req.Email
 	fireAfterSessionIssued(h.lifecycle, "login", res.UserID, &email, c.ClientIP(), c.Request.UserAgent())
-	response.Success(c, http.StatusOK, "Login success", res)
+	response.Success(c, http.StatusOK, "common.ok", "Login success", res, nil)
 }
 
 type refreshReq struct {
@@ -111,7 +111,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		return
 	}
 	h.audit.Log(c.Request.Context(), &res.UserID, "auth.refresh", "success", c.ClientIP(), c.Request.UserAgent(), nil)
-	response.Success(c, http.StatusOK, "Refresh success", res)
+	response.Success(c, http.StatusOK, "common.ok", "Refresh success", res, nil)
 }
 
 type completeMFAReq struct {
@@ -132,7 +132,7 @@ func (h *AuthHandler) CompleteMFA(c *gin.Context) {
 	}
 	h.audit.Log(c.Request.Context(), &res.UserID, "auth.mfa_complete", "success", c.ClientIP(), c.Request.UserAgent(), nil)
 	fireAfterSessionIssued(h.lifecycle, "mfa_complete", res.UserID, nil, c.ClientIP(), c.Request.UserAgent())
-	response.Success(c, http.StatusOK, "MFA verification success", res)
+	response.Success(c, http.StatusOK, "common.ok", "MFA verification success", res, nil)
 }
 
 func (h *AuthHandler) Logout(c *gin.Context) {
@@ -151,7 +151,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		return
 	}
 	h.audit.Log(c.Request.Context(), &userID, "auth.logout", "success", c.ClientIP(), c.Request.UserAgent(), nil)
-	response.Success(c, http.StatusOK, "Logout success", gin.H{"ok": true})
+	response.Success(c, http.StatusOK, "common.ok", "Logout success", gin.H{"ok": true}, nil)
 }
 
 func (h *AuthHandler) Me(c *gin.Context) {
@@ -170,12 +170,12 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	roles, _ := h.rbac.ListUserRoles(c.Request.Context(), userID)
 	perms, _ := h.rbac.ListUserPermissions(c.Request.Context(), userID)
 
-	response.Success(c, http.StatusOK, "User profile", gin.H{
+	response.Success(c, http.StatusOK, "common.ok", "User profile", gin.H{
 		"id":          u.ID.String(),
 		"email":       u.Email,
 		"roles":       roles,
 		"permissions": perms,
-	})
+	}, nil)
 }
 
 func (h *AuthHandler) RequestVerifyEmail(c *gin.Context) {
@@ -190,7 +190,7 @@ func (h *AuthHandler) RequestVerifyEmail(c *gin.Context) {
 		return
 	}
 	h.audit.Log(c.Request.Context(), &userID, "auth.email_verify_request", "success", c.ClientIP(), c.Request.UserAgent(), nil)
-	response.Success(c, http.StatusOK, "Verification email sent", gin.H{"ok": true})
+	response.Success(c, http.StatusOK, "common.ok", "Verification email sent", gin.H{"ok": true}, nil)
 }
 
 type confirmTokenReq struct {
@@ -208,7 +208,7 @@ func (h *AuthHandler) ConfirmVerifyEmail(c *gin.Context) {
 		h.audit.Log(c.Request.Context(), nil, "auth.email_verify_confirm", "failed", c.ClientIP(), c.Request.UserAgent(), nil)
 		return
 	}
-	response.Success(c, http.StatusOK, "Email verified", gin.H{"ok": true})
+	response.Success(c, http.StatusOK, "common.ok", "Email verified", gin.H{"ok": true}, nil)
 	h.audit.Log(c.Request.Context(), nil, "auth.email_verify_confirm", "success", c.ClientIP(), c.Request.UserAgent(), nil)
 }
 
@@ -227,7 +227,7 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 		h.audit.Log(c.Request.Context(), nil, "auth.password_forgot", "failed", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"email": req.Email})
 		return
 	}
-	response.Success(c, http.StatusOK, "If account exists, reset email sent", gin.H{"ok": true})
+	response.Success(c, http.StatusOK, "common.ok", "If account exists, reset email sent", gin.H{"ok": true}, nil)
 	h.audit.Log(c.Request.Context(), nil, "auth.password_forgot", "success", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"email": req.Email})
 }
 
@@ -247,6 +247,6 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 		h.audit.Log(c.Request.Context(), nil, "auth.password_reset", "failed", c.ClientIP(), c.Request.UserAgent(), nil)
 		return
 	}
-	response.Success(c, http.StatusOK, "Password reset success", gin.H{"ok": true})
+	response.Success(c, http.StatusOK, "common.ok", "Password reset success", gin.H{"ok": true}, nil)
 	h.audit.Log(c.Request.Context(), nil, "auth.password_reset", "success", c.ClientIP(), c.Request.UserAgent(), nil)
 }

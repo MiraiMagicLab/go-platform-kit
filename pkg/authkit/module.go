@@ -139,6 +139,22 @@ func (m *Module) RequireRBACAdmin() gin.HandlerFunc {
 	return middleware.RequirePermission(m.rbacSvc, m.cfg.RBACAdminPermission)
 }
 
+// ListUserRoles returns current roles for a user (from app DB).
+func (m *Module) ListUserRoles(ctx context.Context, userID uuid.UUID) ([]string, error) {
+	if m == nil || m.rbacSvc == nil {
+		return nil, errors.New("authkit: rbac service not initialized")
+	}
+	return m.rbacSvc.ListUserRoles(ctx, userID)
+}
+
+// ListUserPermissions returns current permissions for a user (from app DB).
+func (m *Module) ListUserPermissions(ctx context.Context, userID uuid.UUID) ([]string, error) {
+	if m == nil || m.rbacSvc == nil {
+		return nil, errors.New("authkit: rbac service not initialized")
+	}
+	return m.rbacSvc.ListUserPermissions(ctx, userID)
+}
+
 // UserIDFromCtx exposes the authenticated user id from Gin context (set by AuthMiddleware()).
 func UserIDFromCtx(c *gin.Context) (uuid.UUID, bool) { return middleware.UserIDFromCtx(c) }
 

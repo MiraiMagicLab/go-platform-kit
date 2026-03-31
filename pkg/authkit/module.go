@@ -32,6 +32,12 @@ type Config struct {
 	PermissionsCacheTTL time.Duration
 	Issuer              string
 
+	// Optional: control-plane admin SSO verification (TeamToken / JWKS).
+	// If set, host apps can mount `Module.TeamTokenMiddleware()` on admin routes.
+	ControlPlaneJWKSURL  string
+	ControlPlaneIssuer   string
+	ControlPlaneAudience string
+
 	GoogleClientID     string
 	GoogleClientSecret string
 	GoogleRedirectURL  string
@@ -77,9 +83,11 @@ func DefaultConfig() Config {
 		RefreshTokenTTL:     720 * time.Hour,
 		PermissionsCacheTTL: 30 * time.Second,
 		Issuer:              "authkit",
-		PublicBaseURL:       "http://localhost:8080",
-		SeedRoles:           []string{"admin", "user"},
-		SeedPermissions:     []string{"rbac.manage"},
+		ControlPlaneIssuer:  "control-plane",
+		// ControlPlaneAudience is intentionally blank by default (must be explicit).
+		PublicBaseURL:   "http://localhost:8080",
+		SeedRoles:       []string{"admin", "user"},
+		SeedPermissions: []string{"rbac.manage"},
 		SeedRolePermissions: map[string][]string{
 			"admin": {"rbac.manage"},
 		},
@@ -102,6 +110,7 @@ type Module struct {
 	oauthH *controllers.OAuthHandler
 
 	authMW        gin.HandlerFunc
+	teamTokenMW   gin.HandlerFunc
 	rbacSvc       *services.RBACService
 	cleanup       *services.CleanupService
 	redis         *redis.Client
@@ -112,6 +121,12 @@ type Module struct {
 // AuthMiddleware returns the JWT auth middleware for protecting host app routes.
 // Usage: `r.GET("/path", mod.AuthMiddleware(), handler)`
 func (m *Module) AuthMiddleware() gin.HandlerFunc { return m.authMW }
+
+// TeamTokenMiddleware verifies a control-plane-issued TeamToken (JWKS/RS256) and
+// sets `user_id` into Gin context so go-auth-lib's RBAC can query app DB.
+//
+// Returns nil if `cfg.ControlPlaneJWKSURL` or `cfg.ControlPlaneAudience` are not configured.
+func (m *Module) TeamTokenMiddleware() gin.HandlerFunc { return m.teamTokenMW }
 
 // RequirePermission returns a middleware that checks a dynamic RBAC permission string.
 // Usage: `r.GET("/path", mod.AuthMiddleware(), mod.RequirePermission("vocab.read"), handler)`
@@ -330,16 +345,26 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 		return denylist.IsDenied(ctx.Request.Context(), jti)
 	})
 
+	var teamTokenMW gin.HandlerFunc
+	if cfg.ControlPlaneJWKSURL != "" && cfg.ControlPlaneAudience != "" {
+		v, err := middleware.NewTeamTokenVerifier(cfg.ControlPlaneJWKSURL, cfg.ControlPlaneIssuer, cfg.ControlPlaneAudience)
+		if err != nil {
+			return nil, err
+		}
+		teamTokenMW = v.Middleware()
+	}
+
 	return &Module{
-		authH:   authH,
-		rbacH:   rbacH,
-		mfaH:    mfaH,
-		oauthH:  oauthH,
-		authMW:  authMW,
-		rbacSvc: rbacSvc,
-		cleanup: cleanupSvc,
-		redis:   redisClient,
-		cfg:     cfg,
+		authH:       authH,
+		rbacH:       rbacH,
+		mfaH:        mfaH,
+		oauthH:      oauthH,
+		authMW:      authMW,
+		teamTokenMW: teamTokenMW,
+		rbacSvc:     rbacSvc,
+		cleanup:     cleanupSvc,
+		redis:       redisClient,
+		cfg:         cfg,
 	}, nil
 }
 

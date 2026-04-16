@@ -75,3 +75,55 @@ func RenderMessage(template string, args ...interface{}) string {
 func FailNotFound(c *gin.Context) {
 	FailCode(c, http.StatusNotFound, CodeCommonNotFound, nil)
 }
+
+// PaginationMeta describes common limit/offset pagination.
+type PaginationMeta struct {
+	Limit  int   `json:"limit"`
+	Offset int   `json:"offset"`
+	Total  int64 `json:"total"`
+}
+
+type PaginationResult struct {
+	Records    interface{}    `json:"records"`
+	Pagination PaginationMeta `json:"pagination"`
+}
+
+// Pagination returns a consistent paginated response payload.
+func Pagination(c *gin.Context, status int, records interface{}, limit, offset int, total int64) {
+	c.JSON(status, ApiResponse{
+		Code: "success",
+		Data: PaginationResult{
+			Records: records,
+			Pagination: PaginationMeta{
+				Limit:  limit,
+				Offset: offset,
+				Total:  total,
+			},
+		},
+	})
+}
+
+// CursorPaginationMeta describes cursor-based pagination metadata.
+type CursorPaginationMeta struct {
+	NextCursor string `json:"nextCursor" example:"opaque_string"`
+	HasMore    bool   `json:"hasMore"`
+}
+
+type CursorPaginationResult struct {
+	Records    interface{}          `json:"records"`
+	Pagination CursorPaginationMeta `json:"pagination"`
+}
+
+// CursorPagination returns a consistent cursor-based paginated response.
+func CursorPagination(c *gin.Context, status int, records interface{}, nextCursor string, hasMore bool) {
+	c.JSON(status, ApiResponse{
+		Code: "success",
+		Data: CursorPaginationResult{
+			Records: records,
+			Pagination: CursorPaginationMeta{
+				NextCursor: nextCursor,
+				HasMore:    hasMore,
+			},
+		},
+	})
+}

@@ -79,12 +79,14 @@ var defaultMessages = map[string]string{
 	"test.multi_param": "Hello {0}, you have {1} new messages in your {2} bucket.",
 }
 
+// DefaultMessage resolves a human-readable message for a code.
+// This is primarily used for backend-generated content like notifications or logs.
+// For API responses, the frontend should use the Code to look up localized strings.
 func DefaultMessage(code string) string {
 	if msg, ok := defaultMessages[code]; ok {
 		return msg
 	}
-	// Fallback requested by user: use code itself as message.
-	return code
+	return "" // No default message found
 }
 
 // MergeDefaultMessages registers additional code -> defaultMessage entries

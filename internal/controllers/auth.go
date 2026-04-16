@@ -33,27 +33,27 @@ type registerReq struct {
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req registerReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest)
+		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
 		return
 	}
 	if !strings.Contains(req.Email, "@") {
-		response.FailCode(c, http.StatusBadRequest, response.CodeAuthInvalidEmail)
+		response.FailCode(c, http.StatusBadRequest, response.CodeAuthInvalidEmail, nil)
 		return
 	}
 	if len(req.Password) < 8 {
-		response.FailCode(c, http.StatusBadRequest, response.CodeAuthInvalidPassword)
+		response.FailCode(c, http.StatusBadRequest, response.CodeAuthInvalidPassword, nil)
 		return
 	}
 	id, err := h.auth.Register(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
-		response.FailCode(c, http.StatusBadRequest, response.CodeAuthRegisterFailed)
+		response.FailCode(c, http.StatusBadRequest, response.CodeAuthRegisterFailed, nil)
 		h.audit.Log(c.Request.Context(), nil, "auth.register", "failed", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"email": req.Email})
 		return
 	}
 	h.audit.Log(c.Request.Context(), &id, "auth.register", "success", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"email": req.Email})
 	email := req.Email
 	fireAfterSessionIssued(h.lifecycle, "register", id, &email, c.ClientIP(), c.Request.UserAgent())
-	response.Success(c, http.StatusCreated, "common.created", "User registered", gin.H{"id": id.String()}, nil)
+	response.Success(c, http.StatusCreated, "success", gin.H{"id": id.String()}, nil)
 }
 
 type loginReq struct {
@@ -64,7 +64,7 @@ type loginReq struct {
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req loginReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest)
+		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
 		return
 	}
 	res, err := h.auth.Login(c.Request.Context(), req.Email, req.Password)
@@ -77,22 +77,22 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			if b.Reason != nil {
 				params["reason"] = *b.Reason
 			}
-			response.Fail(c, http.StatusForbidden, response.CodeAuthUserBanned, response.DefaultMessage(response.CodeAuthUserBanned), params)
+			response.Fail(c, http.StatusForbidden, response.CodeAuthUserBanned, params)
 			return
 		}
 		if _, ok := err.(services.ErrEmailNotVerified); ok {
-			response.FailCode(c, http.StatusForbidden, response.CodeAuthEmailNotVerified)
+			response.FailCode(c, http.StatusForbidden, response.CodeAuthEmailNotVerified, nil)
 			h.audit.Log(c.Request.Context(), nil, "auth.login", "failed", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"email": req.Email})
 			return
 		}
-		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthInvalidCredentials)
+		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthInvalidCredentials, nil)
 		h.audit.Log(c.Request.Context(), nil, "auth.login", "failed", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"email": req.Email})
 		return
 	}
 	h.audit.Log(c.Request.Context(), &res.UserID, "auth.login", "success", c.ClientIP(), c.Request.UserAgent(), nil)
 	email := req.Email
 	fireAfterSessionIssued(h.lifecycle, "login", res.UserID, &email, c.ClientIP(), c.Request.UserAgent())
-	response.Success(c, http.StatusOK, "common.ok", "Login success", res, nil)
+	response.Success(c, http.StatusOK, "success", res, nil)
 }
 
 type refreshReq struct {
@@ -102,16 +102,16 @@ type refreshReq struct {
 func (h *AuthHandler) Refresh(c *gin.Context) {
 	var req refreshReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest)
+		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
 		return
 	}
 	res, err := h.auth.Refresh(c.Request.Context(), req.RefreshToken)
 	if err != nil {
-		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthInvalidRefresh)
+		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthInvalidRefresh, nil)
 		return
 	}
 	h.audit.Log(c.Request.Context(), &res.UserID, "auth.refresh", "success", c.ClientIP(), c.Request.UserAgent(), nil)
-	response.Success(c, http.StatusOK, "common.ok", "Refresh success", res, nil)
+	response.Success(c, http.StatusOK, "success", res, nil)
 }
 
 type completeMFAReq struct {
@@ -122,55 +122,55 @@ type completeMFAReq struct {
 func (h *AuthHandler) CompleteMFA(c *gin.Context) {
 	var req completeMFAReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest)
+		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
 		return
 	}
 	res, err := h.auth.CompleteMFA(c.Request.Context(), req.MFAToken, req.Code)
 	if err != nil {
-		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthInvalidMFA)
+		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthInvalidMFA, nil)
 		return
 	}
 	h.audit.Log(c.Request.Context(), &res.UserID, "auth.mfa_complete", "success", c.ClientIP(), c.Request.UserAgent(), nil)
 	fireAfterSessionIssued(h.lifecycle, "mfa_complete", res.UserID, nil, c.ClientIP(), c.Request.UserAgent())
-	response.Success(c, http.StatusOK, "common.ok", "MFA verification success", res, nil)
+	response.Success(c, http.StatusOK, "success", res, nil)
 }
 
 func (h *AuthHandler) Logout(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized)
+		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
 		return
 	}
 	jti, exp, ok := middleware.AccessTokenMetaFromCtx(c)
 	if !ok {
-		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized)
+		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
 		return
 	}
 	if err := h.auth.Logout(c.Request.Context(), userID, jti, exp); err != nil {
-		response.FailCode(c, http.StatusInternalServerError, response.CodeAuthLogoutFailed)
+		response.FailCode(c, http.StatusInternalServerError, response.CodeAuthLogoutFailed, nil)
 		return
 	}
 	h.audit.Log(c.Request.Context(), &userID, "auth.logout", "success", c.ClientIP(), c.Request.UserAgent(), nil)
-	response.Success(c, http.StatusOK, "common.ok", "Logout success", gin.H{"ok": true}, nil)
+	response.Success(c, http.StatusOK, "success", gin.H{"ok": true}, nil)
 }
 
 func (h *AuthHandler) Me(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized)
+		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
 		return
 	}
 
 	u, err := h.users.GetByID(c.Request.Context(), userID)
 	if err != nil {
-		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized)
+		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
 		return
 	}
 
 	roles, _ := h.rbac.ListUserRoles(c.Request.Context(), userID)
 	perms, _ := h.rbac.ListUserPermissions(c.Request.Context(), userID)
 
-	response.Success(c, http.StatusOK, "common.ok", "User profile", gin.H{
+	response.Success(c, http.StatusOK, "success", gin.H{
 		"id":          u.ID.String(),
 		"email":       u.Email,
 		"roles":       roles,
@@ -181,16 +181,16 @@ func (h *AuthHandler) Me(c *gin.Context) {
 func (h *AuthHandler) RequestVerifyEmail(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized)
+		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
 		return
 	}
 	if h.email == nil || h.email.RequestVerifyEmail(c.Request.Context(), userID) != nil {
-		response.FailCode(c, http.StatusBadRequest, response.CodeAuthEmailSendFailed)
+		response.FailCode(c, http.StatusBadRequest, response.CodeAuthEmailSendFailed, nil)
 		h.audit.Log(c.Request.Context(), &userID, "auth.email_verify_request", "failed", c.ClientIP(), c.Request.UserAgent(), nil)
 		return
 	}
 	h.audit.Log(c.Request.Context(), &userID, "auth.email_verify_request", "success", c.ClientIP(), c.Request.UserAgent(), nil)
-	response.Success(c, http.StatusOK, "common.ok", "Verification email sent", gin.H{"ok": true}, nil)
+	response.Success(c, http.StatusOK, "success", gin.H{"ok": true}, nil)
 }
 
 type confirmTokenReq struct {
@@ -200,15 +200,15 @@ type confirmTokenReq struct {
 func (h *AuthHandler) ConfirmVerifyEmail(c *gin.Context) {
 	var req confirmTokenReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest)
+		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
 		return
 	}
 	if h.email == nil || h.email.ConfirmVerifyEmail(c.Request.Context(), req.Token) != nil {
-		response.FailCode(c, http.StatusBadRequest, response.CodeAuthInvalidActionToken)
+		response.FailCode(c, http.StatusBadRequest, response.CodeAuthInvalidActionToken, nil)
 		h.audit.Log(c.Request.Context(), nil, "auth.email_verify_confirm", "failed", c.ClientIP(), c.Request.UserAgent(), nil)
 		return
 	}
-	response.Success(c, http.StatusOK, "common.ok", "Email verified", gin.H{"ok": true}, nil)
+	response.Success(c, http.StatusOK, "success", gin.H{"ok": true}, nil)
 	h.audit.Log(c.Request.Context(), nil, "auth.email_verify_confirm", "success", c.ClientIP(), c.Request.UserAgent(), nil)
 }
 
@@ -219,15 +219,15 @@ type forgotPasswordReq struct {
 func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 	var req forgotPasswordReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest)
+		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
 		return
 	}
 	if h.email == nil || h.email.ForgotPassword(c.Request.Context(), req.Email) != nil {
-		response.FailCode(c, http.StatusBadRequest, response.CodeAuthEmailSendFailed)
+		response.FailCode(c, http.StatusBadRequest, response.CodeAuthEmailSendFailed, nil)
 		h.audit.Log(c.Request.Context(), nil, "auth.password_forgot", "failed", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"email": req.Email})
 		return
 	}
-	response.Success(c, http.StatusOK, "common.ok", "If account exists, reset email sent", gin.H{"ok": true}, nil)
+	response.Success(c, http.StatusOK, "success", gin.H{"ok": true}, nil)
 	h.audit.Log(c.Request.Context(), nil, "auth.password_forgot", "success", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"email": req.Email})
 }
 
@@ -239,14 +239,14 @@ type resetPasswordReq struct {
 func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	var req resetPasswordReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest)
+		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
 		return
 	}
 	if h.email == nil || h.email.ResetPassword(c.Request.Context(), req.Token, req.NewPassword) != nil {
-		response.FailCode(c, http.StatusBadRequest, response.CodeAuthPasswordResetFailed)
+		response.FailCode(c, http.StatusBadRequest, response.CodeAuthPasswordResetFailed, nil)
 		h.audit.Log(c.Request.Context(), nil, "auth.password_reset", "failed", c.ClientIP(), c.Request.UserAgent(), nil)
 		return
 	}
-	response.Success(c, http.StatusOK, "common.ok", "Password reset success", gin.H{"ok": true}, nil)
+	response.Success(c, http.StatusOK, "success", gin.H{"ok": true}, nil)
 	h.audit.Log(c.Request.Context(), nil, "auth.password_reset", "success", c.ClientIP(), c.Request.UserAgent(), nil)
 }

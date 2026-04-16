@@ -67,7 +67,7 @@ func SensitiveRateLimit(redisClient *redis.Client, mem *InMemoryRateLimiter, pre
 		}
 
 		if !allowed {
-			response.FailCode(c, http.StatusTooManyRequests, response.CodeCommonTooManyRequests)
+			response.FailCode(c, http.StatusTooManyRequests, response.CodeCommonTooManyRequests, nil)
 			c.Abort()
 			return
 		}

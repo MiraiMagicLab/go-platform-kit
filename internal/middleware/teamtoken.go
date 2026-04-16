@@ -54,7 +54,7 @@ func (v *TeamTokenVerifier) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authz := c.GetHeader("Authorization")
 		if !strings.HasPrefix(strings.ToLower(authz), "bearer ") {
-			response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, "missing bearer token", nil)
+			response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
 			c.Abort()
 			return
 		}
@@ -64,25 +64,25 @@ func (v *TeamTokenVerifier) Middleware() gin.HandlerFunc {
 		claims := &TeamClaims{}
 		tok, err := jwt.ParseWithClaims(raw, claims, v.jwks.Keyfunc)
 		if err != nil || tok == nil || !tok.Valid {
-			response.Fail(c, http.StatusUnauthorized, response.CodeAuthInvalidToken, "invalid token", nil)
+			response.Fail(c, http.StatusUnauthorized, response.CodeAuthInvalidToken, nil)
 			c.Abort()
 			return
 		}
 
 		if claims.Issuer != v.issuer {
-			response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, "invalid issuer", nil)
+			response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
 			c.Abort()
 			return
 		}
 		if !audContains(claims.Audience, v.aud) {
-			response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, "invalid audience", nil)
+			response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
 			c.Abort()
 			return
 		}
 
 		subjectUUID, err := uuid.Parse(claims.Subject)
 		if err != nil {
-			response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, "invalid subject", nil)
+			response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
 			c.Abort()
 			return
 		}

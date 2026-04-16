@@ -22,18 +22,18 @@ func NewMFAHandler(mfa *services.MFAService, audit *services.AuditService) *MFAH
 func (h *MFAHandler) Setup(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, "Unauthorized", nil)
+		response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
 		return
 	}
 
 	out, err := h.mfa.SetupTOTP(c.Request.Context(), userID, userID.String())
 	if err != nil {
-		response.Fail(c, http.StatusBadRequest, response.CodeMFASetupFailed, "Could not setup MFA", nil)
+		response.Fail(c, http.StatusBadRequest, response.CodeMFASetupFailed, nil)
 		h.audit.Log(c.Request.Context(), &userID, "mfa.setup", "failed", c.ClientIP(), c.Request.UserAgent(), nil)
 		return
 	}
 	h.audit.Log(c.Request.Context(), &userID, "mfa.setup", "success", c.ClientIP(), c.Request.UserAgent(), nil)
-	response.Success(c, http.StatusOK, "common.ok", "MFA setup initialized", out, nil)
+	response.Success(c, http.StatusOK, "success", out, nil)
 }
 
 type mfaEnableReq struct {
@@ -43,34 +43,34 @@ type mfaEnableReq struct {
 func (h *MFAHandler) Enable(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, "Unauthorized", nil)
+		response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
 		return
 	}
 	var req mfaEnableReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, "Invalid request body", nil)
+		response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
 		return
 	}
 	if err := h.mfa.EnableTOTP(c.Request.Context(), userID, req.Code); err != nil {
-		response.Fail(c, http.StatusBadRequest, response.CodeMFAEnableFailed, "Invalid OTP", nil)
+		response.Fail(c, http.StatusBadRequest, response.CodeMFAEnableFailed, nil)
 		h.audit.Log(c.Request.Context(), &userID, "mfa.enable", "failed", c.ClientIP(), c.Request.UserAgent(), nil)
 		return
 	}
 	h.audit.Log(c.Request.Context(), &userID, "mfa.enable", "success", c.ClientIP(), c.Request.UserAgent(), nil)
-	response.Success(c, http.StatusOK, "common.ok", "MFA enabled", gin.H{"ok": true}, nil)
+	response.Success(c, http.StatusOK, "success", gin.H{"ok": true}, nil)
 }
 
 func (h *MFAHandler) Disable(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, "Unauthorized", nil)
+		response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
 		return
 	}
 	if err := h.mfa.Disable(c.Request.Context(), userID); err != nil {
-		response.Fail(c, http.StatusBadRequest, response.CodeMFADisableFailed, "Could not disable MFA", nil)
+		response.Fail(c, http.StatusBadRequest, response.CodeMFADisableFailed, nil)
 		h.audit.Log(c.Request.Context(), &userID, "mfa.disable", "failed", c.ClientIP(), c.Request.UserAgent(), nil)
 		return
 	}
 	h.audit.Log(c.Request.Context(), &userID, "mfa.disable", "success", c.ClientIP(), c.Request.UserAgent(), nil)
-	response.Success(c, http.StatusOK, "common.ok", "MFA disabled", gin.H{"ok": true}, nil)
+	response.Success(c, http.StatusOK, "success", gin.H{"ok": true}, nil)
 }

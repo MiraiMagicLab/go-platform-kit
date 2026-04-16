@@ -13,14 +13,14 @@ func RequirePermission(rbac *services.RBACService, permission string) gin.Handle
 	return func(c *gin.Context) {
 		userID, ok := UserIDFromCtx(c)
 		if !ok {
-			response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized)
+			response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
 			c.Abort()
 			return
 		}
 
 		perms, err := rbac.ListUserPermissions(c.Request.Context(), userID)
 		if err != nil {
-			response.FailCode(c, http.StatusInternalServerError, response.CodeCommonInternal)
+			response.FailCode(c, http.StatusInternalServerError, response.CodeCommonInternal, nil)
 			c.Abort()
 			return
 		}
@@ -32,7 +32,7 @@ func RequirePermission(rbac *services.RBACService, permission string) gin.Handle
 			}
 		}
 
-		response.FailCode(c, http.StatusForbidden, response.CodeAuthForbidden, permission)
+		response.FailCodeArgs(c, http.StatusForbidden, response.CodeAuthForbidden, permission)
 		c.Abort()
 	}
 }

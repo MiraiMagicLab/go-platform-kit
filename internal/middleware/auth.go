@@ -65,7 +65,7 @@ func JWTAuth(jwtm *token.JWTManager, users *postgres.UserRepo, denylistFn func(c
 	return func(c *gin.Context) {
 		h := c.GetHeader("Authorization")
 		if h == "" || !strings.HasPrefix(h, "Bearer ") {
-			response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized)
+			response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
 			c.Abort()
 			return
 		}
@@ -74,9 +74,9 @@ func JWTAuth(jwtm *token.JWTManager, users *postgres.UserRepo, denylistFn func(c
 		claims, err := jwtm.ParseAccess(raw)
 		if err != nil {
 			if token.IsExpired(err) {
-				response.FailCode(c, http.StatusUnauthorized, response.CodeAuthTokenExpired)
+				response.FailCode(c, http.StatusUnauthorized, response.CodeAuthTokenExpired, nil)
 			} else {
-				response.FailCode(c, http.StatusUnauthorized, response.CodeAuthInvalidToken)
+				response.FailCode(c, http.StatusUnauthorized, response.CodeAuthInvalidToken, nil)
 			}
 			c.Abort()
 			return
@@ -84,13 +84,13 @@ func JWTAuth(jwtm *token.JWTManager, users *postgres.UserRepo, denylistFn func(c
 
 		userID, err := uuid.Parse(claims.Subject)
 		if err != nil {
-			response.FailCode(c, http.StatusUnauthorized, response.CodeAuthInvalidToken)
+			response.FailCode(c, http.StatusUnauthorized, response.CodeAuthInvalidToken, nil)
 			c.Abort()
 			return
 		}
 
 		if denied, _ := denylist.IsDenied(c, claims.ID); denied {
-			response.FailCode(c, http.StatusUnauthorized, response.CodeAuthTokenRevoked)
+			response.FailCode(c, http.StatusUnauthorized, response.CodeAuthTokenRevoked, nil)
 			c.Abort()
 			return
 		}
@@ -98,12 +98,12 @@ func JWTAuth(jwtm *token.JWTManager, users *postgres.UserRepo, denylistFn func(c
 		// Enforce token_version to support immediate logout invalidation.
 		u, err := users.GetByID(c.Request.Context(), userID)
 		if err != nil || u.TokenVersion != claims.TokenVersion {
-			response.FailCode(c, http.StatusUnauthorized, response.CodeAuthTokenRevoked)
+			response.FailCode(c, http.StatusUnauthorized, response.CodeAuthTokenRevoked, nil)
 			c.Abort()
 			return
 		}
 		if u.BannedUntil != nil && time.Now().Before(*u.BannedUntil) {
-			response.Fail(c, http.StatusForbidden, response.CodeAuthUserBanned, response.DefaultMessage(response.CodeAuthUserBanned), map[string]interface{}{
+			response.Fail(c, http.StatusForbidden, response.CodeAuthUserBanned, map[string]interface{}{
 				"banned_until": u.BannedUntil.UTC().Format("2006-01-02T15:04:05Z"),
 			})
 			c.Abort()

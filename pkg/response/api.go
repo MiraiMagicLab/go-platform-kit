@@ -9,46 +9,46 @@ import (
 )
 
 type ApiResponse struct {
-	Success     bool                   `json:"success"`
-	CodeMessage string                 `json:"codeMessage"`
-	Message     string                 `json:"message,omitempty"`
-	Params      map[string]interface{} `json:"params,omitempty"`
-	Data        interface{}            `json:"data,omitempty"`
+	Code   string                 `json:"code"`
+	Params map[string]interface{} `json:"params,omitempty"`
+	Data   interface{}            `json:"data,omitempty"`
 }
 
-func Success(c *gin.Context, status int, code, message string, data interface{}, params map[string]interface{}) {
+func Success(c *gin.Context, status int, code string, data interface{}, params map[string]interface{}) {
 	if code == "" {
-		code = "common.ok"
+		code = "success"
 	}
 	c.JSON(status, ApiResponse{
-		Success:     true,
-		CodeMessage: code,
-		Message:     message,
-		Params:      params,
-		Data:        data,
+		Code:   code,
+		Params: params,
+		Data:   data,
 	})
 }
 
-func Fail(c *gin.Context, status int, code, fallbackMessage string, params map[string]interface{}) {
-	if fallbackMessage == "" {
-		fallbackMessage = DefaultMessage(code)
-	}
+func Fail(c *gin.Context, status int, code string, params map[string]interface{}) {
 	if code == "" {
-		code = "common.unknown_error"
+		code = "system.unknown_error"
 	}
 	c.JSON(status, ApiResponse{
-		Success:     false,
-		CodeMessage: code,
-		Message:     fallbackMessage,
-		Params:      params,
+		Code:   code,
+		Params: params,
 	})
 }
 
-// FailCode uses default message by error code, supports positional parameters:
-// e.g. template "Hello {0}" with args ("Alice").
-func FailCode(c *gin.Context, status int, code string, args ...interface{}) {
-	msg := RenderMessage(DefaultMessage(code), args...)
-	Fail(c, status, code, msg, BuildParams(args...))
+// FailCode returns an error response with stable code for client i18n.
+func FailCode(c *gin.Context, status int, code string, params map[string]interface{}) {
+	if code == "" {
+		code = "system.unknown_error"
+	}
+	c.JSON(status, ApiResponse{
+		Code:   code,
+		Params: params,
+	})
+}
+
+// FailCodeArgs supports positional parameters like "{0}". Params will contain the args.
+func FailCodeArgs(c *gin.Context, status int, code string, args ...interface{}) {
+	FailCode(c, status, code, BuildParams(args...))
 }
 
 func BuildParams(args ...interface{}) map[string]interface{} {
@@ -71,7 +71,7 @@ func RenderMessage(template string, args ...interface{}) string {
 	return out
 }
 
-// FailNotFound responds with 404 and the standard not-found code (same shape as other FailCode responses).
+// FailNotFound responds with 404 and the standard not-found code.
 func FailNotFound(c *gin.Context) {
-	FailCode(c, http.StatusNotFound, CodeCommonNotFound)
+	FailCode(c, http.StatusNotFound, CodeCommonNotFound, nil)
 }

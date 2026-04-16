@@ -30,7 +30,7 @@ func (h *OAuthHandler) Login(c *gin.Context) {
 
 	url, err := h.oauth.AuthCodeURL(provider, state)
 	if err != nil {
-		response.Fail(c, http.StatusBadRequest, response.CodeOAuthNotConfigured, "OAuth provider is not configured", nil)
+		response.Fail(c, http.StatusBadRequest, response.CodeOAuthNotConfigured, nil)
 		return
 	}
 	c.Redirect(http.StatusFound, url)
@@ -42,31 +42,31 @@ func (h *OAuthHandler) Callback(c *gin.Context) {
 	state := c.Query("state")
 	stored, err := c.Cookie("oauth_state")
 	if err != nil || stored == "" || stored != state {
-		response.Fail(c, http.StatusBadRequest, response.CodeOAuthStateInvalid, "Invalid OAuth state", nil)
+		response.Fail(c, http.StatusBadRequest, response.CodeOAuthStateInvalid, nil)
 		return
 	}
 	c.SetCookie("oauth_state", "", -1, "/", "", false, true)
 
 	id, err := h.oauth.ExchangeAndFetchIdentity(c.Request.Context(), provider, code)
 	if err != nil {
-		response.Fail(c, http.StatusBadRequest, response.CodeOAuthExchangeFail, "OAuth exchange failed", nil)
+		response.Fail(c, http.StatusBadRequest, response.CodeOAuthExchangeFail, nil)
 		return
 	}
 	userID, err := h.oauth.FindOrCreateUserForIdentity(c.Request.Context(), id)
 	if err != nil {
-		response.Fail(c, http.StatusBadRequest, response.CodeOAuthUserFail, "OAuth user processing failed", nil)
+		response.Fail(c, http.StatusBadRequest, response.CodeOAuthUserFail, nil)
 		return
 	}
 
 	session, err := h.auth.StartSession(c.Request.Context(), userID)
 	if err != nil {
-		response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, "Could not create session", nil)
+		response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
 		return
 	}
 
 	fireAfterSessionIssued(h.lifecycle, "oauth", userID, nil, c.ClientIP(), c.Request.UserAgent())
 	// For service-to-service usage, return JSON. You can also redirect to a frontend and pass tokens another way.
-	response.Success(c, http.StatusOK, "common.ok", "OAuth login success", session, nil)
+	response.Success(c, http.StatusOK, "success", session, nil)
 }
 
 func randomHex(nBytes int) string {

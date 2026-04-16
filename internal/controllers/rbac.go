@@ -28,15 +28,15 @@ type createRoleReq struct {
 func (h *RBACHandler) CreateRole(c *gin.Context) {
 	var req createRoleReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, "Invalid request body", nil)
+		response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
 		return
 	}
 	id, err := h.rbac.CreateRole(c.Request.Context(), req.Name)
 	if err != nil {
-		response.Fail(c, http.StatusBadRequest, response.CodeRBACCreateRoleFailed, "Could not create role", nil)
+		response.Fail(c, http.StatusBadRequest, response.CodeRBACCreateRoleFailed, nil)
 		return
 	}
-	response.Success(c, http.StatusCreated, "common.created", "Role created", gin.H{"id": id.String()}, nil)
+	response.Success(c, http.StatusCreated, "success", gin.H{"id": id.String()}, nil)
 }
 
 type createPermissionReq struct {
@@ -46,15 +46,15 @@ type createPermissionReq struct {
 func (h *RBACHandler) CreatePermission(c *gin.Context) {
 	var req createPermissionReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, "Invalid request body", nil)
+		response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
 		return
 	}
 	id, err := h.rbac.CreatePermission(c.Request.Context(), req.Name)
 	if err != nil {
-		response.Fail(c, http.StatusBadRequest, response.CodeRBACCreatePermissionFailed, "Could not create permission", nil)
+		response.Fail(c, http.StatusBadRequest, response.CodeRBACCreatePermissionFailed, nil)
 		return
 	}
-	response.Success(c, http.StatusCreated, "common.created", "Permission created", gin.H{"id": id.String()}, nil)
+	response.Success(c, http.StatusCreated, "success", gin.H{"id": id.String()}, nil)
 }
 
 type assignRolePermsReq struct {
@@ -64,28 +64,28 @@ type assignRolePermsReq struct {
 func (h *RBACHandler) AssignPermissionsToRole(c *gin.Context) {
 	roleID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, "Invalid role id", nil)
+		response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
 		return
 	}
 	var req assignRolePermsReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, "Invalid request body", nil)
+		response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
 		return
 	}
 	var pids []uuid.UUID
 	for _, s := range req.PermissionIDs {
 		pid, err := uuid.Parse(s)
 		if err != nil {
-			response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, "Invalid permission id", nil)
+			response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
 			return
 		}
 		pids = append(pids, pid)
 	}
 	if err := h.rbac.AssignPermissionsToRole(c.Request.Context(), roleID, pids); err != nil {
-		response.Fail(c, http.StatusBadRequest, response.CodeRBACAssignFailed, "Could not assign permissions", nil)
+		response.Fail(c, http.StatusBadRequest, response.CodeRBACAssignFailed, nil)
 		return
 	}
-	response.Success(c, http.StatusOK, "common.ok", "Permissions assigned", gin.H{"ok": true}, nil)
+	response.Success(c, http.StatusOK, "success", gin.H{"ok": true}, nil)
 }
 
 type assignUserRolesReq struct {
@@ -95,28 +95,28 @@ type assignUserRolesReq struct {
 func (h *RBACHandler) AssignRolesToUser(c *gin.Context) {
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, "Invalid user id", nil)
+		response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
 		return
 	}
 	var req assignUserRolesReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, "Invalid request body", nil)
+		response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
 		return
 	}
 	var rids []uuid.UUID
 	for _, s := range req.RoleIDs {
 		rid, err := uuid.Parse(s)
 		if err != nil {
-			response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, "Invalid role id", nil)
+			response.Fail(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
 			return
 		}
 		rids = append(rids, rid)
 	}
 	if err := h.rbac.AssignRolesToUser(c.Request.Context(), userID, rids); err != nil {
-		response.Fail(c, http.StatusBadRequest, response.CodeRBACAssignFailed, "Could not assign roles", nil)
+		response.Fail(c, http.StatusBadRequest, response.CodeRBACAssignFailed, nil)
 		return
 	}
-	response.Success(c, http.StatusOK, "common.ok", "Roles assigned", gin.H{"ok": true}, nil)
+	response.Success(c, http.StatusOK, "success", gin.H{"ok": true}, nil)
 }
 
 type banUserReq struct {
@@ -127,30 +127,30 @@ type banUserReq struct {
 func (h *RBACHandler) BanUser(c *gin.Context) {
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest)
+		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
 		return
 	}
 	var req banUserReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest)
+		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
 		return
 	}
 	until, err := time.Parse(time.RFC3339, req.BannedUntil)
 	if err != nil || !until.After(time.Now()) {
-		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest)
+		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
 		if h.audit != nil {
 			h.audit.Log(c.Request.Context(), &userID, "auth.user_ban", "failed", c.ClientIP(), c.Request.UserAgent(), nil)
 		}
 		return
 	}
 	if h.admin == nil || h.admin.BanUser(c.Request.Context(), userID, until.UTC(), req.Reason) != nil {
-		response.FailCode(c, http.StatusBadRequest, response.CodeRBACAssignFailed)
+		response.FailCode(c, http.StatusBadRequest, response.CodeRBACAssignFailed, nil)
 		if h.audit != nil {
 			h.audit.Log(c.Request.Context(), &userID, "auth.user_ban", "failed", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"banned_until": req.BannedUntil})
 		}
 		return
 	}
-	response.Success(c, http.StatusOK, "common.ok", "User banned", gin.H{"ok": true, "banned_until": until.UTC().Format(time.RFC3339)}, nil)
+	response.Success(c, http.StatusOK, "success", gin.H{"ok": true, "banned_until": until.UTC().Format(time.RFC3339)}, nil)
 	if h.audit != nil {
 		h.audit.Log(c.Request.Context(), &userID, "auth.user_ban", "success", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"banned_until": until.UTC().Format(time.RFC3339), "reason": req.Reason})
 	}
@@ -159,17 +159,17 @@ func (h *RBACHandler) BanUser(c *gin.Context) {
 func (h *RBACHandler) UnbanUser(c *gin.Context) {
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest)
+		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
 		return
 	}
 	if h.admin == nil || h.admin.UnbanUser(c.Request.Context(), userID) != nil {
-		response.FailCode(c, http.StatusBadRequest, response.CodeRBACAssignFailed)
+		response.FailCode(c, http.StatusBadRequest, response.CodeRBACAssignFailed, nil)
 		if h.audit != nil {
 			h.audit.Log(c.Request.Context(), &userID, "auth.user_unban", "failed", c.ClientIP(), c.Request.UserAgent(), nil)
 		}
 		return
 	}
-	response.Success(c, http.StatusOK, "common.ok", "User unbanned", gin.H{"ok": true}, nil)
+	response.Success(c, http.StatusOK, "success", gin.H{"ok": true}, nil)
 	if h.audit != nil {
 		h.audit.Log(c.Request.Context(), &userID, "auth.user_unban", "success", c.ClientIP(), c.Request.UserAgent(), nil)
 	}

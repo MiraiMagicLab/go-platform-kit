@@ -1,151 +1,150 @@
 -- Enable UUID generation (pgcrypto provides gen_random_uuid()).
-create extension if not exists pgcrypto;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- USERS
-create table if not exists users (
-  id uuid primary key default gen_random_uuid(),
-  email text not null unique,
-  password_hash text not null,
-  email_verified boolean not null default false,
-  password_login_enabled boolean not null default true,
-  banned_until timestamptz null,
-  ban_reason text null,
-  token_version int not null default 0,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+CREATE TABLE IF NOT EXISTS users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  email_verified BOOLEAN NOT NULL DEFAULT false,
+  password_login_enabled BOOLEAN NOT NULL DEFAULT true,
+  banned_until TIMESTAMPTZ NULL,
+  ban_reason TEXT NULL,
+  token_version INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create index if not exists idx_users_email on users(email);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 
 -- ROLES
-create table if not exists roles (
-  id uuid primary key default gen_random_uuid(),
-  name text not null unique,
-  created_at timestamptz not null default now()
+CREATE TABLE IF NOT EXISTS roles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- PERMISSIONS
-create table if not exists permissions (
-  id uuid primary key default gen_random_uuid(),
-  name text not null unique,
-  created_at timestamptz not null default now()
+CREATE TABLE IF NOT EXISTS permissions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- USER_ROLES (many-to-many)
-create table if not exists user_roles (
-  user_id uuid not null references users(id) on delete cascade,
-  role_id uuid not null references roles(id) on delete cascade,
-  created_at timestamptz not null default now(),
-  primary key (user_id, role_id)
+CREATE TABLE IF NOT EXISTS user_roles (
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role_id UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, role_id)
 );
 
-create index if not exists idx_user_roles_user_id on user_roles(user_id);
-create index if not exists idx_user_roles_role_id on user_roles(role_id);
+CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON user_roles(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_roles_role_id ON user_roles(role_id);
 
 -- ROLE_PERMISSIONS (many-to-many)
-create table if not exists role_permissions (
-  role_id uuid not null references roles(id) on delete cascade,
-  permission_id uuid not null references permissions(id) on delete cascade,
-  created_at timestamptz not null default now(),
-  primary key (role_id, permission_id)
+CREATE TABLE IF NOT EXISTS role_permissions (
+  role_id UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+  permission_id UUID NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (role_id, permission_id)
 );
 
-create index if not exists idx_role_permissions_role_id on role_permissions(role_id);
-create index if not exists idx_role_permissions_permission_id on role_permissions(permission_id);
+CREATE INDEX IF NOT EXISTS idx_role_permissions_role_id ON role_permissions(role_id);
+CREATE INDEX IF NOT EXISTS idx_role_permissions_permission_id ON role_permissions(permission_id);
 
 -- REFRESH TOKENS (rotation + revocation)
-create table if not exists refresh_tokens (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references users(id) on delete cascade,
-  token_hash text not null unique,
-  expires_at timestamptz not null,
-  revoked_at timestamptz null,
-  revoked_reason text null,
-  replaced_by uuid null references refresh_tokens(id),
-  created_at timestamptz not null default now()
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  revoked_at TIMESTAMPTZ NULL,
+  revoked_reason TEXT NULL,
+  replaced_by UUID NULL REFERENCES refresh_tokens(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create index if not exists idx_refresh_tokens_user_id on refresh_tokens(user_id);
-create index if not exists idx_refresh_tokens_token_hash on refresh_tokens(token_hash);
-create index if not exists idx_refresh_tokens_expires_at on refresh_tokens(expires_at);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token_hash ON refresh_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);
 
 -- OAUTH / SOCIAL IDENTITIES
-create table if not exists user_identities (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references users(id) on delete cascade,
-  provider text not null, -- e.g. 'google', 'facebook'
-  provider_subject text not null, -- provider user id (sub)
-  email text null,
-  created_at timestamptz not null default now(),
-  unique (provider, provider_subject),
-  unique (user_id, provider)
+CREATE TABLE IF NOT EXISTS user_identities (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL, -- e.g. 'google', 'facebook'
+  provider_subject TEXT NOT NULL, -- provider user id (sub)
+  email TEXT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (provider, provider_subject),
+  UNIQUE (user_id, provider)
 );
 
-create index if not exists idx_user_identities_user_id on user_identities(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_identities_user_id ON user_identities(user_id);
 
 -- MFA (TOTP)
-create table if not exists user_mfa (
-  user_id uuid primary key references users(id) on delete cascade,
-  totp_secret text not null,
-  enabled boolean not null default false,
-  enabled_at timestamptz null,
-  created_at timestamptz not null default now()
+CREATE TABLE IF NOT EXISTS user_mfa (
+  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  totp_secret TEXT NOT NULL,
+  enabled BOOLEAN NOT NULL DEFAULT false,
+  enabled_at TIMESTAMPTZ NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create table if not exists user_mfa_recovery_codes (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references users(id) on delete cascade,
-  code_hash text not null,
-  used_at timestamptz null,
-  created_at timestamptz not null default now()
+CREATE TABLE IF NOT EXISTS user_mfa_recovery_codes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code_hash TEXT NOT NULL,
+  used_at TIMESTAMPTZ NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create index if not exists idx_user_mfa_recovery_user_id on user_mfa_recovery_codes(user_id);
-create index if not exists idx_user_mfa_recovery_code_hash on user_mfa_recovery_codes(code_hash);
+CREATE INDEX IF NOT EXISTS idx_user_mfa_recovery_user_id ON user_mfa_recovery_codes(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_mfa_recovery_code_hash ON user_mfa_recovery_codes(code_hash);
 
 -- EMAIL ACTION TOKENS (verify email / reset password)
-create table if not exists email_action_tokens (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references users(id) on delete cascade,
-  action_type text not null, -- verify_email | reset_password
-  token_hash text not null unique,
-  expires_at timestamptz not null,
-  used_at timestamptz null,
-  created_at timestamptz not null default now()
+CREATE TABLE IF NOT EXISTS email_action_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  action_type TEXT NOT NULL, -- verify_email | reset_password
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-create index if not exists idx_email_action_tokens_user_id on email_action_tokens(user_id);
-create index if not exists idx_email_action_tokens_action on email_action_tokens(action_type);
-create index if not exists idx_email_action_tokens_expires on email_action_tokens(expires_at);
+CREATE INDEX IF NOT EXISTS idx_email_action_tokens_user_id ON email_action_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_email_action_tokens_action ON email_action_tokens(action_type);
+CREATE INDEX IF NOT EXISTS idx_email_action_tokens_expires ON email_action_tokens(expires_at);
 
 -- AUDIT LOGS
-create table if not exists audit_logs (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid null references users(id) on delete set null,
-  action text not null,
-  status text not null,
-  ip text null,
-  user_agent text null,
-  metadata jsonb null,
-  created_at timestamptz not null default now()
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  status TEXT NOT NULL,
+  ip TEXT NULL,
+  user_agent TEXT NULL,
+  metadata JSONB NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create index if not exists idx_audit_logs_user_id on audit_logs(user_id);
-create index if not exists idx_audit_logs_action on audit_logs(action);
-create index if not exists idx_audit_logs_created_at on audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
 
 -- Seed baseline roles + permissions (idempotent)
-insert into roles (name) values ('admin') on conflict (name) do nothing;
-insert into roles (name) values ('user') on conflict (name) do nothing;
+INSERT INTO roles (name) VALUES ('admin') ON CONFLICT (name) DO NOTHING;
+INSERT INTO roles (name) VALUES ('user') ON CONFLICT (name) DO NOTHING;
 
-insert into permissions (name) values
+INSERT INTO permissions (name) VALUES
   ('rbac.manage')
-on conflict (name) do nothing;
+ON CONFLICT (name) DO NOTHING;
 
 -- Give admin all existing permissions
-insert into role_permissions (role_id, permission_id)
-select r.id, p.id
-from roles r
-join permissions p on true
-where r.name = 'admin'
-on conflict do nothing;
-
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id
+FROM roles r
+JOIN permissions p ON true
+WHERE r.name = 'admin'
+ON CONFLICT DO NOTHING;

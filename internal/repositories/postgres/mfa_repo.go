@@ -17,10 +17,10 @@ func NewMFARepo(db *pgxpool.Pool) *MFARepo { return &MFARepo{db: db} }
 
 func (r *MFARepo) UpsertTOTPSecret(ctx context.Context, userID uuid.UUID, secret string) error {
 	_, err := r.db.Exec(ctx, `
-		insert into user_mfa (user_id, totp_secret, enabled)
-		values ($1, $2, false)
-		on conflict (user_id)
-		do update set totp_secret = excluded.totp_secret, enabled = false, enabled_at = null
+		INSERT INTO user_mfa (user_id, totp_secret, enabled)
+		VALUES ($1, $2, false)
+		ON CONFLICT (user_id)
+		DO UPDATE SET totp_secret = EXCLUDED.totp_secret, enabled = false, enabled_at = NULL
 	`, userID, secret)
 	return err
 }
@@ -28,9 +28,9 @@ func (r *MFARepo) UpsertTOTPSecret(ctx context.Context, userID uuid.UUID, secret
 func (r *MFARepo) GetMFA(ctx context.Context, userID uuid.UUID) (MFADTO, bool, error) {
 	var m MFADTO
 	err := r.db.QueryRow(ctx, `
-		select user_id, totp_secret, enabled, enabled_at, created_at
-		from user_mfa
-		where user_id = $1
+		SELECT user_id, totp_secret, enabled, enabled_at, created_at
+		FROM user_mfa
+		WHERE user_id = $1
 	`, userID).Scan(&m.UserID, &m.TOTPSecret, &m.Enabled, &m.EnabledAt, &m.CreatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -43,21 +43,21 @@ func (r *MFARepo) GetMFA(ctx context.Context, userID uuid.UUID) (MFADTO, bool, e
 
 func (r *MFARepo) EnableMFA(ctx context.Context, userID uuid.UUID) error {
 	_, err := r.db.Exec(ctx, `
-		update user_mfa
-		set enabled = true, enabled_at = now()
-		where user_id = $1
+		UPDATE user_mfa
+		SET enabled = true, enabled_at = NOW()
+		WHERE user_id = $1
 	`, userID)
 	return err
 }
 
 func (r *MFARepo) DisableMFA(ctx context.Context, userID uuid.UUID) error {
 	_, err := r.db.Exec(ctx, `
-		delete from user_mfa where user_id = $1
+		DELETE FROM user_mfa WHERE user_id = $1
 	`, userID)
 	if err != nil {
 		return err
 	}
-	_, err = r.db.Exec(ctx, `delete from user_mfa_recovery_codes where user_id = $1`, userID)
+	_, err = r.db.Exec(ctx, `DELETE FROM user_mfa_recovery_codes WHERE user_id = $1`, userID)
 	return err
 }
 
@@ -68,15 +68,15 @@ func (r *MFARepo) ReplaceRecoveryCodes(ctx context.Context, userID uuid.UUID, co
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	if _, err := tx.Exec(ctx, `delete from user_mfa_recovery_codes where user_id = $1`, userID); err != nil {
+	if _, err := tx.Exec(ctx, `DELETE FROM user_mfa_recovery_codes WHERE user_id = $1`, userID); err != nil {
 		return err
 	}
 
 	batch := &pgx.Batch{}
 	for _, h := range codeHashes {
 		batch.Queue(`
-			insert into user_mfa_recovery_codes (user_id, code_hash)
-			values ($1, $2)
+			INSERT INTO user_mfa_recovery_codes (user_id, code_hash)
+			VALUES ($1, $2)
 		`, userID, h)
 	}
 	br := tx.SendBatch(ctx, batch)
@@ -94,10 +94,10 @@ func (r *MFARepo) ReplaceRecoveryCodes(ctx context.Context, userID uuid.UUID, co
 func (r *MFARepo) UseRecoveryCode(ctx context.Context, userID uuid.UUID, codeHash string) (bool, error) {
 	var id uuid.UUID
 	err := r.db.QueryRow(ctx, `
-		select id
-		from user_mfa_recovery_codes
-		where user_id = $1 and code_hash = $2 and used_at is null
-		limit 1
+		SELECT id
+		FROM user_mfa_recovery_codes
+		WHERE user_id = $1 AND code_hash = $2 AND used_at IS NULL
+		LIMIT 1
 	`, userID, codeHash).Scan(&id)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -107,9 +107,9 @@ func (r *MFARepo) UseRecoveryCode(ctx context.Context, userID uuid.UUID, codeHas
 	}
 	now := time.Now()
 	ct, err := r.db.Exec(ctx, `
-		update user_mfa_recovery_codes
-		set used_at = $3
-		where id = $1 and user_id = $2 and used_at is null
+		UPDATE user_mfa_recovery_codes
+		SET used_at = $3
+		WHERE id = $1 AND user_id = $2 AND used_at IS NULL
 	`, id, userID, now)
 	if err != nil {
 		return false, err
@@ -119,8 +119,8 @@ func (r *MFARepo) UseRecoveryCode(ctx context.Context, userID uuid.UUID, codeHas
 
 func (r *MFARepo) Cleanup(ctx context.Context, now time.Time) error {
 	_, err := r.db.Exec(ctx, `
-		delete from user_mfa_recovery_codes
-		where used_at is not null and used_at < $1 - interval '30 days'
+		DELETE FROM user_mfa_recovery_codes
+		WHERE used_at IS NOT NULL AND used_at < $1 - INTERVAL '30 days'
 	`, now)
 	return err
 }

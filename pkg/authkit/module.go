@@ -610,7 +610,7 @@ func seedRBAC(ctx context.Context, pg *pgxpool.Pool, cfg Config) error {
 		if role == "" {
 			continue
 		}
-		if _, err := pg.Exec(ctx, `insert into roles (name) values ($1) on conflict (name) do nothing`, role); err != nil {
+		if _, err := pg.Exec(ctx, `INSERT INTO roles (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`, role); err != nil {
 			return fmt.Errorf("seed role %q: %w", role, err)
 		}
 	}
@@ -618,7 +618,7 @@ func seedRBAC(ctx context.Context, pg *pgxpool.Pool, cfg Config) error {
 		if perm == "" {
 			continue
 		}
-		if _, err := pg.Exec(ctx, `insert into permissions (name) values ($1) on conflict (name) do nothing`, perm); err != nil {
+		if _, err := pg.Exec(ctx, `INSERT INTO permissions (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`, perm); err != nil {
 			return fmt.Errorf("seed permission %q: %w", perm, err)
 		}
 	}
@@ -631,12 +631,12 @@ func seedRBAC(ctx context.Context, pg *pgxpool.Pool, cfg Config) error {
 				continue
 			}
 			if _, err := pg.Exec(ctx, `
-				insert into role_permissions (role_id, permission_id)
-				select r.id, p.id
-				from roles r
-				join permissions p on p.name = $2
-				where r.name = $1
-				on conflict do nothing
+				INSERT INTO role_permissions (role_id, permission_id)
+				SELECT r.id, p.id
+				FROM roles r
+				JOIN permissions p ON p.name = $2
+				WHERE r.name = $1
+				ON CONFLICT DO NOTHING
 			`, role, perm); err != nil {
 				return fmt.Errorf("seed role_permission %q->%q: %w", role, perm, err)
 			}

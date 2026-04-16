@@ -20,9 +20,9 @@ func NewRefreshTokenRepo(db *pgxpool.Pool) *RefreshTokenRepo {
 func (r *RefreshTokenRepo) Create(ctx context.Context, userID uuid.UUID, tokenHash string, expiresAt time.Time) (uuid.UUID, error) {
 	var id uuid.UUID
 	err := r.db.QueryRow(ctx, `
-		insert into refresh_tokens (user_id, token_hash, expires_at)
-		values ($1, $2, $3)
-		returning id
+		INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
+		VALUES ($1, $2, $3)
+		RETURNING id
 	`, userID, tokenHash, expiresAt).Scan(&id)
 	return id, err
 }
@@ -30,30 +30,30 @@ func (r *RefreshTokenRepo) Create(ctx context.Context, userID uuid.UUID, tokenHa
 func (r *RefreshTokenRepo) GetByHash(ctx context.Context, tokenHash string) (RefreshTokenDTO, error) {
 	var t RefreshTokenDTO
 	err := r.db.QueryRow(ctx, `
-		select id, user_id, token_hash, expires_at, revoked_at, revoked_reason, created_at
-		from refresh_tokens
-		where token_hash = $1
+		SELECT id, user_id, token_hash, expires_at, revoked_at, revoked_reason, created_at
+		FROM refresh_tokens
+		WHERE token_hash = $1
 	`, tokenHash).Scan(&t.ID, &t.UserID, &t.TokenHash, &t.ExpiresAt, &t.RevokedAt, &t.RevokedReason, &t.CreatedAt)
 	return t, err
 }
 
 func (r *RefreshTokenRepo) Revoke(ctx context.Context, refreshTokenID uuid.UUID, replacedBy *uuid.UUID) error {
 	_, err := r.db.Exec(ctx, `
-		update refresh_tokens
-		set revoked_at = now(),
+		UPDATE refresh_tokens
+		SET revoked_at = NOW(),
 		    revoked_reason = 'rotated',
 		    replaced_by = $2
-		where id = $1 and revoked_at is null
+		WHERE id = $1 AND revoked_at IS NULL
 	`, refreshTokenID, replacedBy)
 	return err
 }
 
 func (r *RefreshTokenRepo) RevokeAllForUser(ctx context.Context, userID uuid.UUID) error {
 	_, err := r.db.Exec(ctx, `
-		update refresh_tokens
-		set revoked_at = now(),
+		UPDATE refresh_tokens
+		SET revoked_at = NOW(),
 		    revoked_reason = 'logout_all'
-		where user_id = $1 and revoked_at is null
+		WHERE user_id = $1 AND revoked_at IS NULL
 	`, userID)
 	return err
 }
@@ -69,10 +69,10 @@ func (r *RefreshTokenRepo) Rotate(ctx context.Context, oldTokenHash, newTokenHas
 	var expiresAt time.Time
 	var revokedAt *time.Time
 	err = tx.QueryRow(ctx, `
-		select id, user_id, expires_at, revoked_at
-		from refresh_tokens
-		where token_hash = $1
-		for update
+		SELECT id, user_id, expires_at, revoked_at
+		FROM refresh_tokens
+		WHERE token_hash = $1
+		FOR UPDATE
 	`, oldTokenHash).Scan(&oldID, &userID, &expiresAt, &revokedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -83,10 +83,10 @@ func (r *RefreshTokenRepo) Rotate(ctx context.Context, oldTokenHash, newTokenHas
 
 	if revokedAt != nil || time.Now().After(expiresAt) {
 		if _, err := tx.Exec(ctx, `
-			update refresh_tokens
-			set revoked_at = now(),
+			UPDATE refresh_tokens
+			SET revoked_at = NOW(),
 			    revoked_reason = 'replay_detected'
-			where user_id = $1 and revoked_at is null
+			WHERE user_id = $1 AND revoked_at IS NULL
 		`, userID); err != nil {
 			return RotateResult{}, err
 		}
@@ -102,20 +102,20 @@ func (r *RefreshTokenRepo) Rotate(ctx context.Context, oldTokenHash, newTokenHas
 
 	var newID uuid.UUID
 	err = tx.QueryRow(ctx, `
-		insert into refresh_tokens (user_id, token_hash, expires_at)
-		values ($1, $2, $3)
-		returning id
+		INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
+		VALUES ($1, $2, $3)
+		RETURNING id
 	`, userID, newTokenHash, newExpiresAt).Scan(&newID)
 	if err != nil {
 		return RotateResult{}, err
 	}
 
 	if _, err := tx.Exec(ctx, `
-		update refresh_tokens
-		set revoked_at = now(),
+		UPDATE refresh_tokens
+		SET revoked_at = NOW(),
 		    revoked_reason = 'rotated',
 		    replaced_by = $2
-		where id = $1 and revoked_at is null
+		WHERE id = $1 AND revoked_at IS NULL
 	`, oldID, newID); err != nil {
 		return RotateResult{}, err
 	}
@@ -131,10 +131,9 @@ func (r *RefreshTokenRepo) Rotate(ctx context.Context, oldTokenHash, newTokenHas
 
 func (r *RefreshTokenRepo) Cleanup(ctx context.Context, now time.Time) error {
 	_, err := r.db.Exec(ctx, `
-		delete from refresh_tokens
-		where expires_at < $1
-		   or (revoked_at is not null and revoked_at < $1 - interval '30 days')
+		DELETE FROM refresh_tokens
+		WHERE expires_at < $1
+		   OR (revoked_at IS NOT NULL AND revoked_at < $1 - INTERVAL '30 days')
 	`, now)
 	return err
 }
-

@@ -19,8 +19,8 @@ func NewRBACRepo(db *pgxpool.Pool) *RBACRepo {
 func (r *RBACRepo) CreateRole(ctx context.Context, name string) (uuid.UUID, error) {
 	var id uuid.UUID
 	err := r.db.QueryRow(ctx, `
-		insert into roles (name) values ($1)
-		returning id
+		INSERT INTO roles (name) VALUES ($1)
+		RETURNING id
 	`, name).Scan(&id)
 	return id, err
 }
@@ -28,8 +28,8 @@ func (r *RBACRepo) CreateRole(ctx context.Context, name string) (uuid.UUID, erro
 func (r *RBACRepo) CreatePermission(ctx context.Context, name string) (uuid.UUID, error) {
 	var id uuid.UUID
 	err := r.db.QueryRow(ctx, `
-		insert into permissions (name) values ($1)
-		returning id
+		INSERT INTO permissions (name) VALUES ($1)
+		RETURNING id
 	`, name).Scan(&id)
 	return id, err
 }
@@ -38,9 +38,9 @@ func (r *RBACRepo) AssignPermissionsToRole(ctx context.Context, roleID uuid.UUID
 	batch := &pgx.Batch{}
 	for _, pid := range permissionIDs {
 		batch.Queue(`
-			insert into role_permissions (role_id, permission_id)
-			values ($1, $2)
-			on conflict do nothing
+			INSERT INTO role_permissions (role_id, permission_id)
+			VALUES ($1, $2)
+			ON CONFLICT DO NOTHING
 		`, roleID, pid)
 	}
 	br := r.db.SendBatch(ctx, batch)
@@ -53,9 +53,9 @@ func (r *RBACRepo) AssignRolesToUser(ctx context.Context, userID uuid.UUID, role
 	batch := &pgx.Batch{}
 	for _, rid := range roleIDs {
 		batch.Queue(`
-			insert into user_roles (user_id, role_id)
-			values ($1, $2)
-			on conflict do nothing
+			INSERT INTO user_roles (user_id, role_id)
+			VALUES ($1, $2)
+			ON CONFLICT DO NOTHING
 		`, userID, rid)
 	}
 	br := r.db.SendBatch(ctx, batch)
@@ -66,12 +66,12 @@ func (r *RBACRepo) AssignRolesToUser(ctx context.Context, userID uuid.UUID, role
 
 func (r *RBACRepo) ListUserPermissions(ctx context.Context, userID uuid.UUID) ([]string, error) {
 	rows, err := r.db.Query(ctx, `
-		select distinct p.name
-		from permissions p
-		join role_permissions rp on rp.permission_id = p.id
-		join user_roles ur on ur.role_id = rp.role_id
-		where ur.user_id = $1
-		order by p.name
+		SELECT DISTINCT p.name
+		FROM permissions p
+		JOIN role_permissions rp ON rp.permission_id = p.id
+		JOIN user_roles ur ON ur.role_id = rp.role_id
+		WHERE ur.user_id = $1
+		ORDER BY p.name
 	`, userID)
 	if err != nil {
 		return nil, err
@@ -91,11 +91,11 @@ func (r *RBACRepo) ListUserPermissions(ctx context.Context, userID uuid.UUID) ([
 
 func (r *RBACRepo) ListUserRoles(ctx context.Context, userID uuid.UUID) ([]string, error) {
 	rows, err := r.db.Query(ctx, `
-		select r.name
-		from roles r
-		join user_roles ur on ur.role_id = r.id
-		where ur.user_id = $1
-		order by r.name
+		SELECT r.name
+		FROM roles r
+		JOIN user_roles ur ON ur.role_id = r.id
+		WHERE ur.user_id = $1
+		ORDER BY r.name
 	`, userID)
 	if err != nil {
 		return nil, err

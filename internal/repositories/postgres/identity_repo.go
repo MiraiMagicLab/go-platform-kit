@@ -19,9 +19,9 @@ func NewIdentityRepo(db *pgxpool.Pool) *IdentityRepo {
 func (r *IdentityRepo) FindUserIDByProvider(ctx context.Context, provider, providerSubject string) (uuid.UUID, bool, error) {
 	var userID uuid.UUID
 	err := r.db.QueryRow(ctx, `
-		select user_id
-		from user_identities
-		where provider = $1 and provider_subject = $2
+		SELECT user_id
+		FROM user_identities
+		WHERE provider = $1 AND provider_subject = $2
 	`, provider, providerSubject).Scan(&userID)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -34,9 +34,9 @@ func (r *IdentityRepo) FindUserIDByProvider(ctx context.Context, provider, provi
 
 func (r *IdentityRepo) LinkIdentity(ctx context.Context, userID uuid.UUID, provider, providerSubject, email string) error {
 	_, err := r.db.Exec(ctx, `
-		insert into user_identities (user_id, provider, provider_subject, email)
-		values ($1, $2, $3, nullif($4, ''))
-		on conflict (provider, provider_subject) do nothing
+		INSERT INTO user_identities (user_id, provider, provider_subject, email)
+		VALUES ($1, $2, $3, NULLIF($4, ''))
+		ON CONFLICT (provider, provider_subject) DO NOTHING
 	`, userID, provider, providerSubject, email)
 	return err
 }

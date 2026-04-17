@@ -165,6 +165,7 @@ RBAC:
 - `POST /users/:id/roles`
 - `POST /users/:id/ban` (body: `{ "banned_until": "<RFC3339>", "reason": "..." }`)
 - `POST /users/:id/unban`
+- `GET /users` (query: `page`, `pageSize`, `search`, `email`, `email_verified`, `password_login_enabled`, `is_banned`, `created_from`, `created_to`, `sort_by=email|created_at|updated_at`, `sort_order=asc|desc`)
 
 Dynamic roles/permissions can be bootstrapped from host project via:
 - `cfg.SeedRoles`

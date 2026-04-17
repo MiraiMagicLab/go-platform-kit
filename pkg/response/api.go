@@ -9,9 +9,10 @@ import (
 )
 
 type ApiResponse struct {
-	Code   string                 `json:"code"`
-	Params map[string]interface{} `json:"params,omitempty"`
-	Data   interface{}            `json:"data,omitempty"`
+	Success bool                   `json:"success"`
+	Code    string                 `json:"code"`
+	Params  map[string]interface{} `json:"params,omitempty"`
+	Data    interface{}            `json:"data,omitempty"`
 }
 
 func Success(c *gin.Context, status int, code string, data interface{}, params map[string]interface{}) {
@@ -19,9 +20,10 @@ func Success(c *gin.Context, status int, code string, data interface{}, params m
 		code = "success"
 	}
 	c.JSON(status, ApiResponse{
-		Code:   code,
-		Params: params,
-		Data:   data,
+		Success: true,
+		Code:    code,
+		Params:  params,
+		Data:    data,
 	})
 }
 
@@ -30,8 +32,9 @@ func Fail(c *gin.Context, status int, code string, params map[string]interface{}
 		code = "system.unknown_error"
 	}
 	c.JSON(status, ApiResponse{
-		Code:   code,
-		Params: params,
+		Success: false,
+		Code:    code,
+		Params:  params,
 	})
 }
 
@@ -41,8 +44,9 @@ func FailCode(c *gin.Context, status int, code string, params map[string]interfa
 		code = "system.unknown_error"
 	}
 	c.JSON(status, ApiResponse{
-		Code:   code,
-		Params: params,
+		Success: false,
+		Code:    code,
+		Params:  params,
 	})
 }
 
@@ -91,7 +95,8 @@ type PaginationResult struct {
 // Pagination returns a consistent paginated response payload.
 func Pagination(c *gin.Context, status int, records interface{}, limit, offset int, total int64) {
 	c.JSON(status, ApiResponse{
-		Code: "success",
+		Success: true,
+		Code:    "success",
 		Data: PaginationResult{
 			Records: records,
 			Pagination: PaginationMeta{
@@ -117,7 +122,8 @@ type CursorPaginationResult struct {
 // CursorPagination returns a consistent cursor-based paginated response.
 func CursorPagination(c *gin.Context, status int, records interface{}, nextCursor string, hasMore bool) {
 	c.JSON(status, ApiResponse{
-		Code: "success",
+		Success: true,
+		Code:    "success",
 		Data: CursorPaginationResult{
 			Records: records,
 			Pagination: CursorPaginationMeta{

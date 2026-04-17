@@ -202,6 +202,7 @@ type RBACEndpoints struct {
 	AssignUserRoles   bool
 	BanUser           bool
 	UnbanUser         bool
+	ListUsers         bool
 }
 
 func DefaultMountOptions() MountOptions {
@@ -234,6 +235,7 @@ func DefaultMountOptions() MountOptions {
 			AssignUserRoles:   true,
 			BanUser:           true,
 			UnbanUser:         true,
+			ListUsers:         true,
 		},
 	}
 }
@@ -448,6 +450,7 @@ func (m *Module) MountRBAC(r gin.IRouter) {
 	rbac.POST("/users/:id/roles", m.rbacH.AssignRolesToUser)
 	rbac.POST("/users/:id/ban", m.rbacH.BanUser)
 	rbac.POST("/users/:id/unban", m.rbacH.UnbanUser)
+	rbac.GET("/users", m.rbacH.ListUsers)
 }
 
 // MountAll mounts common middleware and all endpoints.
@@ -549,6 +552,9 @@ func (m *Module) MountWithOptions(r gin.IRouter, opt MountOptions) {
 		}
 		if opt.RBAC.UnbanUser {
 			rbac.POST("/users/:id/unban", m.rbacH.UnbanUser)
+		}
+		if opt.RBAC.ListUsers {
+			rbac.GET("/users", m.rbacH.ListUsers)
 		}
 	}
 }

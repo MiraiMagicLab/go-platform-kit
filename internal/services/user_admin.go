@@ -30,3 +30,6 @@ func (s *UserAdminService) BanUser(ctx context.Context, userID uuid.UUID, until 
 func (s *UserAdminService) UnbanUser(ctx context.Context, userID uuid.UUID) error {
 	return s.users.SetBan(ctx, userID, nil, "")
 }
+func (s *UserAdminService) ListUsers(ctx context.Context, page, pageSize int, filter postgres.ListUsersFilter) ([]postgres.UserDTO, int, error) {
+	return s.users.ListUsers(ctx, page, pageSize, filter)
+}

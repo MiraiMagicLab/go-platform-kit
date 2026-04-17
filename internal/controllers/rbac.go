@@ -2,13 +2,16 @@ package controllers
 
 import (
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/MiraiMagicLab/go-auth-lib/pkg/response"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/repositories/postgres"
 	"github.com/MiraiMagicLab/go-auth-lib/internal/services"
+	"github.com/MiraiMagicLab/go-auth-lib/pkg/response"
 )
 
 type RBACHandler struct {
@@ -173,4 +176,77 @@ func (h *RBACHandler) UnbanUser(c *gin.Context) {
 	if h.audit != nil {
 		h.audit.Log(c.Request.Context(), &userID, "auth.user_unban", "success", c.ClientIP(), c.Request.UserAgent(), nil)
 	}
+}
+func (h *RBACHandler) ListUsers(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
+
+	filter := postgres.ListUsersFilter{
+		Search:    c.Query("search"),
+		Email:     c.Query("email"),
+		SortBy:    c.DefaultQuery("sort_by", "created_at"),
+		SortOrder: c.DefaultQuery("sort_order", "desc"),
+	}
+	if v := strings.TrimSpace(c.Query("email_verified")); v != "" {
+		parsed, err := strconv.ParseBool(v)
+		if err != nil {
+			response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
+			return
+		}
+		filter.EmailVerified = &parsed
+	}
+	if v := strings.TrimSpace(c.Query("password_login_enabled")); v != "" {
+		parsed, err := strconv.ParseBool(v)
+		if err != nil {
+			response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
+			return
+		}
+		filter.PasswordLoginEnabled = &parsed
+	}
+	if v := strings.TrimSpace(c.Query("is_banned")); v != "" {
+		parsed, err := strconv.ParseBool(v)
+		if err != nil {
+			response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
+			return
+		}
+		filter.IsBanned = &parsed
+	}
+	if v := strings.TrimSpace(c.Query("created_from")); v != "" {
+		parsed, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
+			return
+		}
+		filter.CreatedFrom = &parsed
+	}
+	if v := strings.TrimSpace(c.Query("created_to")); v != "" {
+		parsed, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
+			return
+		}
+		filter.CreatedTo = &parsed
+	}
+
+	users, total, err := h.admin.ListUsers(c.Request.Context(), page, pageSize, filter)
+	if err != nil {
+		response.FailCode(c, http.StatusInternalServerError, response.CodeCommonInternal, nil)
+		return
+	}
+
+	var list []gin.H
+	for _, u := range users {
+		list = append(list, gin.H{
+			"id":                     u.ID.String(),
+			"email":                  u.Email,
+			"email_verified":         u.EmailVerified,
+			"password_login_enabled": u.PasswordLoginEnabled,
+			"banned_until":           u.BannedUntil,
+			"ban_reason":             u.BanReason,
+			"created_at":             u.CreatedAt,
+			"updated_at":             u.UpdatedAt,
+		})
+	}
+
+	response.Pagination(c, http.StatusOK, list, pageSize, (page-1)*pageSize, int64(total))
 }

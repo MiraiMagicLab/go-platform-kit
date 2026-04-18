@@ -20,6 +20,12 @@ var (
 	ErrInvalidRefresh     = errors.New("invalid refresh token")
 )
 
+// ClientMeta carries client connection info stored on refresh-token / session rows (IP, User-Agent).
+type ClientMeta struct {
+	IP string
+	UA string
+}
+
 type ErrUserBanned struct {
 	Until  *time.Time
 	Reason *string
@@ -93,7 +99,7 @@ type LoginResult struct {
 	MFAToken     string    `json:"mfa_token,omitempty"`
 }
 
-func (s *AuthService) Login(ctx context.Context, email, password string) (LoginResult, error) {
+func (s *AuthService) Login(ctx context.Context, email, password string, meta ClientMeta) (LoginResult, error) {
 	u, err := s.users.GetByEmail(ctx, email)
 	if err != nil {
 		return LoginResult{}, ErrInvalidCredentials
@@ -110,10 +116,10 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (LoginR
 		return LoginResult{}, ErrInvalidCredentials
 	}
 
-	return s.StartSession(ctx, u.ID)
+	return s.StartSession(ctx, u.ID, meta)
 }
 
-func (s *AuthService) StartSession(ctx context.Context, userID uuid.UUID) (LoginResult, error) {
+func (s *AuthService) StartSession(ctx context.Context, userID uuid.UUID, meta ClientMeta) (LoginResult, error) {
 	u, err := s.users.GetByID(ctx, userID)
 	if err != nil {
 		return LoginResult{}, ErrInvalidCredentials
@@ -141,17 +147,19 @@ func (s *AuthService) StartSession(ctx context.Context, userID uuid.UUID) (Login
 		}
 	}
 
-	access, _, err := s.jwt.NewAccessToken(u.ID, u.TokenVersion, s.accessTTL)
+	sessionID := uuid.New()
+
+	access, _, err := s.jwt.NewAccessToken(u.ID, u.TokenVersion, sessionID, s.accessTTL)
 	if err != nil {
 		return LoginResult{}, err
 	}
-	refresh, _, err := s.jwt.NewRefreshToken(u.ID, u.TokenVersion, s.refreshTTL)
+	refresh, _, err := s.jwt.NewRefreshToken(u.ID, u.TokenVersion, sessionID, s.refreshTTL)
 	if err != nil {
 		return LoginResult{}, err
 	}
 
 	hash := hashToken(refresh)
-	if _, err := s.refreshRepo.Create(ctx, u.ID, hash, time.Now().Add(s.refreshTTL)); err != nil {
+	if _, err := s.refreshRepo.Create(ctx, u.ID, sessionID, hash, time.Now().Add(s.refreshTTL), meta.IP, meta.UA); err != nil {
 		return LoginResult{}, err
 	}
 
@@ -162,7 +170,7 @@ func (s *AuthService) StartSession(ctx context.Context, userID uuid.UUID) (Login
 	}, nil
 }
 
-func (s *AuthService) CompleteMFA(ctx context.Context, mfaToken string, otpOrRecovery string) (LoginResult, error) {
+func (s *AuthService) CompleteMFA(ctx context.Context, mfaToken string, otpOrRecovery string, meta ClientMeta) (LoginResult, error) {
 	if s.mfaRepo == nil {
 		return LoginResult{}, ErrInvalidCredentials
 	}
@@ -194,10 +202,10 @@ func (s *AuthService) CompleteMFA(ctx context.Context, mfaToken string, otpOrRec
 		return LoginResult{}, ErrInvalidCredentials
 	}
 
-	return s.StartSession(ctx, userID)
+	return s.StartSession(ctx, userID, meta)
 }
 
-func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (LoginResult, error) {
+func (s *AuthService) Refresh(ctx context.Context, refreshToken string, meta ClientMeta) (LoginResult, error) {
 	claims, err := s.jwt.ParseRefresh(refreshToken)
 	if err != nil {
 		return LoginResult{}, ErrInvalidRefresh
@@ -209,22 +217,19 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (LoginRe
 	}
 
 	rtHash := hashToken(refreshToken)
-	newRefresh, _, err := s.jwt.NewRefreshToken(userID, claims.TokenVersion, s.refreshTTL)
-	if err != nil {
-		return LoginResult{}, err
-	}
-	newHash := hashToken(newRefresh)
-
-	rotateRes, err := s.refreshRepo.Rotate(ctx, rtHash, newHash, time.Now().Add(s.refreshTTL))
+	oldRow, err := s.refreshRepo.GetByHash(ctx, rtHash)
 	if err != nil {
 		return LoginResult{}, ErrInvalidRefresh
 	}
-	if rotateRes.ReplayDetected {
-		_ = s.users.IncrementTokenVersion(ctx, userID)
+	if oldRow.RevokedAt != nil || time.Now().After(oldRow.ExpiresAt) || oldRow.UserID != userID {
 		return LoginResult{}, ErrInvalidRefresh
 	}
-	if rotateRes.Invalid || rotateRes.UserID != userID {
-		return LoginResult{}, ErrInvalidRefresh
+	sessID := oldRow.SessionID
+	if claims.SessionID != "" {
+		csid, errP := uuid.Parse(claims.SessionID)
+		if errP != nil || csid != sessID {
+			return LoginResult{}, ErrInvalidRefresh
+		}
 	}
 
 	u, err := s.users.GetByID(ctx, userID)
@@ -238,7 +243,26 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (LoginRe
 		return LoginResult{}, ErrInvalidRefresh
 	}
 
-	newAccess, _, err := s.jwt.NewAccessToken(userID, u.TokenVersion, s.accessTTL)
+	newRefresh, _, err := s.jwt.NewRefreshToken(userID, u.TokenVersion, sessID, s.refreshTTL)
+	if err != nil {
+		return LoginResult{}, err
+	}
+	newHash := hashToken(newRefresh)
+
+	rotateRes, err := s.refreshRepo.Rotate(ctx, rtHash, newHash, time.Now().Add(s.refreshTTL), meta.IP, meta.UA)
+	if err != nil {
+		return LoginResult{}, ErrInvalidRefresh
+	}
+	if rotateRes.ReplayDetected {
+		_ = s.users.IncrementTokenVersion(ctx, userID)
+		return LoginResult{}, ErrInvalidRefresh
+	}
+	if rotateRes.Invalid || rotateRes.UserID != userID {
+		return LoginResult{}, ErrInvalidRefresh
+	}
+	sessID = rotateRes.SessionID
+
+	newAccess, _, err := s.jwt.NewAccessToken(userID, u.TokenVersion, sessID, s.accessTTL)
 	if err != nil {
 		return LoginResult{}, err
 	}

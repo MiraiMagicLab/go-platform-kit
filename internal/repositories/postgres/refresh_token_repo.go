@@ -17,23 +17,23 @@ func NewRefreshTokenRepo(db *pgxpool.Pool) *RefreshTokenRepo {
 	return &RefreshTokenRepo{db: db}
 }
 
-func (r *RefreshTokenRepo) Create(ctx context.Context, userID uuid.UUID, tokenHash string, expiresAt time.Time) (uuid.UUID, error) {
+func (r *RefreshTokenRepo) Create(ctx context.Context, userID, sessionID uuid.UUID, tokenHash string, expiresAt time.Time, ip, ua string) (uuid.UUID, error) {
 	var id uuid.UUID
 	err := r.db.QueryRow(ctx, `
-		INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
-		VALUES ($1, $2, $3)
+		INSERT INTO refresh_tokens (user_id, session_id, token_hash, expires_at, ip_address, user_agent, last_used_at)
+		VALUES ($1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''), NOW())
 		RETURNING id
-	`, userID, tokenHash, expiresAt).Scan(&id)
+	`, userID, sessionID, tokenHash, expiresAt, ip, ua).Scan(&id)
 	return id, err
 }
 
 func (r *RefreshTokenRepo) GetByHash(ctx context.Context, tokenHash string) (RefreshTokenDTO, error) {
 	var t RefreshTokenDTO
 	err := r.db.QueryRow(ctx, `
-		SELECT id, user_id, token_hash, expires_at, revoked_at, revoked_reason, created_at
+		SELECT id, user_id, session_id, token_hash, expires_at, revoked_at, revoked_reason, created_at, ip_address, user_agent, last_used_at
 		FROM refresh_tokens
 		WHERE token_hash = $1
-	`, tokenHash).Scan(&t.ID, &t.UserID, &t.TokenHash, &t.ExpiresAt, &t.RevokedAt, &t.RevokedReason, &t.CreatedAt)
+	`, tokenHash).Scan(&t.ID, &t.UserID, &t.SessionID, &t.TokenHash, &t.ExpiresAt, &t.RevokedAt, &t.RevokedReason, &t.CreatedAt, &t.IPAddress, &t.UserAgent, &t.LastUsedAt)
 	return t, err
 }
 
@@ -58,22 +58,50 @@ func (r *RefreshTokenRepo) RevokeAllForUser(ctx context.Context, userID uuid.UUI
 	return err
 }
 
-func (r *RefreshTokenRepo) Rotate(ctx context.Context, oldTokenHash, newTokenHash string, newExpiresAt time.Time) (RotateResult, error) {
+// RevokeAllForSession ends one login session (all refresh rows with this session_id).
+func (r *RefreshTokenRepo) RevokeAllForSession(ctx context.Context, userID, sessionID uuid.UUID) (int64, error) {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE refresh_tokens
+		SET revoked_at = NOW(),
+		    revoked_reason = 'session_revoked'
+		WHERE user_id = $1 AND session_id = $2 AND revoked_at IS NULL
+	`, userID, sessionID)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
+// RevokeAllExceptSession revokes every active refresh token except those belonging to keepSessionID.
+func (r *RefreshTokenRepo) RevokeAllExceptSession(ctx context.Context, userID, keepSessionID uuid.UUID) (int64, error) {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE refresh_tokens
+		SET revoked_at = NOW(),
+		    revoked_reason = 'revoke_other_sessions'
+		WHERE user_id = $1 AND session_id <> $2 AND revoked_at IS NULL
+	`, userID, keepSessionID)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
+func (r *RefreshTokenRepo) Rotate(ctx context.Context, oldTokenHash, newTokenHash string, newExpiresAt time.Time, clientIP, userAgent string) (RotateResult, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return RotateResult{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	var oldID, userID uuid.UUID
+	var oldID, userID, sessionID uuid.UUID
 	var expiresAt time.Time
 	var revokedAt *time.Time
 	err = tx.QueryRow(ctx, `
-		SELECT id, user_id, expires_at, revoked_at
+		SELECT id, user_id, session_id, expires_at, revoked_at
 		FROM refresh_tokens
 		WHERE token_hash = $1
 		FOR UPDATE
-	`, oldTokenHash).Scan(&oldID, &userID, &expiresAt, &revokedAt)
+	`, oldTokenHash).Scan(&oldID, &userID, &sessionID, &expiresAt, &revokedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return RotateResult{Invalid: true}, nil
@@ -95,6 +123,7 @@ func (r *RefreshTokenRepo) Rotate(ctx context.Context, oldTokenHash, newTokenHas
 		}
 		return RotateResult{
 			UserID:         userID,
+			SessionID:      sessionID,
 			Invalid:        true,
 			ReplayDetected: true,
 		}, nil
@@ -102,10 +131,10 @@ func (r *RefreshTokenRepo) Rotate(ctx context.Context, oldTokenHash, newTokenHas
 
 	var newID uuid.UUID
 	err = tx.QueryRow(ctx, `
-		INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
-		VALUES ($1, $2, $3)
+		INSERT INTO refresh_tokens (user_id, session_id, token_hash, expires_at, ip_address, user_agent, last_used_at)
+		VALUES ($1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''), NOW())
 		RETURNING id
-	`, userID, newTokenHash, newExpiresAt).Scan(&newID)
+	`, userID, sessionID, newTokenHash, newExpiresAt, clientIP, userAgent).Scan(&newID)
 	if err != nil {
 		return RotateResult{}, err
 	}
@@ -125,6 +154,7 @@ func (r *RefreshTokenRepo) Rotate(ctx context.Context, oldTokenHash, newTokenHas
 	}
 	return RotateResult{
 		UserID:            userID,
+		SessionID:         sessionID,
 		NewRefreshTokenID: &newID,
 	}, nil
 }
@@ -136,4 +166,38 @@ func (r *RefreshTokenRepo) Cleanup(ctx context.Context, now time.Time) error {
 		   OR (revoked_at IS NOT NULL AND revoked_at < $1 - INTERVAL '30 days')
 	`, now)
 	return err
+}
+
+// ListActiveSessions returns one row per active session (logical device), with metadata from the current refresh token head.
+func (r *RefreshTokenRepo) ListActiveSessions(ctx context.Context, userID uuid.UUID) ([]SessionListRow, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT DISTINCT ON (rt.session_id)
+			rt.session_id,
+			rt.id,
+			(SELECT MIN(r2.created_at) FROM refresh_tokens r2
+			 WHERE r2.user_id = rt.user_id AND r2.session_id = rt.session_id) AS session_started_at,
+			rt.last_used_at,
+			COALESCE(rt.ip_address, ''),
+			COALESCE(rt.user_agent, ''),
+			rt.expires_at
+		FROM refresh_tokens rt
+		WHERE rt.user_id = $1
+		  AND rt.revoked_at IS NULL
+		  AND rt.expires_at > NOW()
+		ORDER BY rt.session_id, rt.created_at DESC
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []SessionListRow
+	for rows.Next() {
+		var s SessionListRow
+		if err := rows.Scan(&s.SessionID, &s.RefreshID, &s.CreatedAt, &s.LastUsedAt, &s.IPAddress, &s.UserAgent, &s.ExpiresAt); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
 }

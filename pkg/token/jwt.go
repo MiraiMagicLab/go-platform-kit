@@ -19,6 +19,8 @@ const (
 type Claims struct {
 	TokenType    TokenType `json:"typ"`
 	TokenVersion int       `json:"tv"`
+	// SessionID (sid) groups refresh chains for a single logical login (device). Omitted for legacy tokens.
+	SessionID string `json:"sid,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -36,18 +38,18 @@ func NewJWTManager(accessSecret, refreshSecret, issuer string) *JWTManager {
 	}
 }
 
-func (m *JWTManager) NewAccessToken(userID uuid.UUID, tokenVersion int, ttl time.Duration) (string, string, error) {
-	return m.newToken(TokenTypeAccess, userID, tokenVersion, ttl)
+func (m *JWTManager) NewAccessToken(userID uuid.UUID, tokenVersion int, sessionID uuid.UUID, ttl time.Duration) (string, string, error) {
+	return m.newToken(TokenTypeAccess, userID, tokenVersion, sessionID, ttl)
 }
 
-func (m *JWTManager) NewRefreshToken(userID uuid.UUID, tokenVersion int, ttl time.Duration) (string, string, error) {
-	return m.newToken(TokenTypeRefresh, userID, tokenVersion, ttl)
+func (m *JWTManager) NewRefreshToken(userID uuid.UUID, tokenVersion int, sessionID uuid.UUID, ttl time.Duration) (string, string, error) {
+	return m.newToken(TokenTypeRefresh, userID, tokenVersion, sessionID, ttl)
 }
 
 func (m *JWTManager) NewMFAToken(userID uuid.UUID, tokenVersion int, ttl time.Duration) (string, string, error) {
 	// MFA token is short-lived and is only used to complete 2FA challenge.
 	// It is signed with access secret.
-	return m.newToken(TokenTypeMFA, userID, tokenVersion, ttl)
+	return m.newToken(TokenTypeMFA, userID, tokenVersion, uuid.Nil, ttl)
 }
 
 func (m *JWTManager) ParseAccess(tokenStr string) (*Claims, error) {
@@ -62,7 +64,7 @@ func (m *JWTManager) ParseMFA(tokenStr string) (*Claims, error) {
 	return m.parse(tokenStr, m.accessSecret, TokenTypeMFA)
 }
 
-func (m *JWTManager) newToken(tt TokenType, userID uuid.UUID, tokenVersion int, ttl time.Duration) (tokenStr string, jti string, err error) {
+func (m *JWTManager) newToken(tt TokenType, userID uuid.UUID, tokenVersion int, sessionID uuid.UUID, ttl time.Duration) (tokenStr string, jti string, err error) {
 	now := time.Now()
 	jtiUUID := uuid.New().String()
 
@@ -77,6 +79,9 @@ func (m *JWTManager) newToken(tt TokenType, userID uuid.UUID, tokenVersion int, 
 			NotBefore: jwt.NewNumericDate(now.Add(-5 * time.Second)),
 			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
 		},
+	}
+	if sessionID != uuid.Nil {
+		claims.SessionID = sessionID.String()
 	}
 
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

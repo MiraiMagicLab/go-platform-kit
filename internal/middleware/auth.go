@@ -17,6 +17,7 @@ const (
 	ctxUserIDKey    = "user_id"
 	ctxAccessJTIKey = "access_jti"
 	ctxAccessExpKey = "access_exp"
+	ctxSessionIDKey = "session_id"
 )
 
 func UserIDFromCtx(c *gin.Context) (uuid.UUID, bool) {
@@ -43,6 +44,19 @@ func AccessTokenMetaFromCtx(c *gin.Context) (string, time.Time, bool) {
 		return "", time.Time{}, false
 	}
 	return jti, exp, true
+}
+
+// SessionIDFromCtx returns the logical session id (JWT claim sid) when present, else uuid.Nil (legacy access token).
+func SessionIDFromCtx(c *gin.Context) uuid.UUID {
+	v, ok := c.Get(ctxSessionIDKey)
+	if !ok {
+		return uuid.Nil
+	}
+	id, ok := v.(uuid.UUID)
+	if !ok {
+		return uuid.Nil
+	}
+	return id
 }
 
 type AccessTokenDenylistChecker interface {
@@ -115,6 +129,13 @@ func JWTAuth(jwtm *token.JWTManager, users *postgres.UserRepo, denylistFn func(c
 		if claims.ExpiresAt != nil {
 			c.Set(ctxAccessExpKey, claims.ExpiresAt.Time)
 		}
+		sid := uuid.Nil
+		if claims.SessionID != "" {
+			if p, err := uuid.Parse(claims.SessionID); err == nil {
+				sid = p
+			}
+		}
+		c.Set(ctxSessionIDKey, sid)
 		c.Next()
 	}
 }

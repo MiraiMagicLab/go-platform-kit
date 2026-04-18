@@ -58,7 +58,10 @@ func (h *OAuthHandler) Callback(c *gin.Context) {
 		return
 	}
 
-	session, err := h.auth.StartSession(c.Request.Context(), userID)
+	session, err := h.auth.StartSession(c.Request.Context(), userID, services.ClientMeta{
+		IP: c.ClientIP(),
+		UA: c.Request.UserAgent(),
+	})
 	if err != nil {
 		response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
 		return

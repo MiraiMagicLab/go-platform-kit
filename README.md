@@ -149,8 +149,12 @@ Auth:
 - `POST /password/reset`
 - `POST /email/verify/confirm`
 - `POST /login/2fa`
-- `POST /logout`
+- `POST /logout` (global sign-out: revoke all refresh tokens + bump `token_version`)
 - `GET /me`
+- **Sessions (devices)** — access JWT includes `sid` (session id) after migration `0002` + new login:
+  - `GET /sessions` — active sessions (non-revoked refresh, not expired); `current: true` when `sid` matches the access token.
+  - `DELETE /sessions/:id` — revoke one session by id. If it is the current session, refresh tokens for that session are revoked and the current access `jti` is denylisted (when Redis denylist is configured).
+  - `POST /sessions/revoke-others` — revoke every other session; requires access token with `sid` (legacy access tokens without `sid` return `auth.session.no_sid_in_token` — sign in again).
 - `POST /mfa/setup`
 - `POST /mfa/enable`
 - `POST /mfa/disable`
@@ -183,19 +187,22 @@ Security and reliability additions:
 - background cleanup job for expired/revoked tokens and old used recovery codes
 
 Migrations:
-- `migrations/0001_init.up.sql`
-- `migrations/0001_init.down.sql`
+- `migrations/0001_init.up.sql` / `0001_init.down.sql`
+- `migrations/0002_refresh_sessions.up.sql` / `0002_refresh_sessions.down.sql` (bảng `refresh_tokens`: `session_id`, IP/UA, `last_used_at`)
 
 Apply schema (recommended):
 ```bash
 psql "$DATABASE_URL" -f migrations/0001_init.up.sql
+psql "$DATABASE_URL" -f migrations/0002_refresh_sessions.up.sql
 ```
 
 ### Security notes
 
 - Access token invalidation uses both `token_version` checks and optional Redis denylist by `jti` on logout.
+- Per-session revoke (`DELETE /sessions/:id`) **does not** bump `token_version`; it only revokes that session’s refresh tokens. Other devices keep working until their short-lived access JWT expires (~15m by default).
 - Refresh tokens are stored hashed and rotated in a DB transaction (`SELECT ... FOR UPDATE`) to prevent race issues.
 - Refresh token replay attempts force-revoke active refresh tokens and invalidate current access lineage (`token_version` increment).
+- Access và refresh JWT mới mang `sid` (session id) để UI biết “phiên hiện tại” và gọi `revoke-others` an toàn.
 
 ### API response contract
 

@@ -8,8 +8,8 @@ import (
 
 	"github.com/MiraiMagicLab/go-auth-lib/internal/middleware"
 	"github.com/MiraiMagicLab/go-auth-lib/internal/repositories/postgres"
-	"github.com/MiraiMagicLab/go-auth-lib/pkg/response"
 	"github.com/MiraiMagicLab/go-auth-lib/internal/services"
+	"github.com/MiraiMagicLab/go-auth-lib/pkg/response"
 )
 
 type AuthHandler struct {
@@ -67,7 +67,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
 		return
 	}
-	res, err := h.auth.Login(c.Request.Context(), req.Email, req.Password)
+	res, err := h.auth.Login(c.Request.Context(), req.Email, req.Password, services.ClientMeta{
+		IP: c.ClientIP(),
+		UA: c.Request.UserAgent(),
+	})
 	if err != nil {
 		if b, ok := err.(services.ErrUserBanned); ok {
 			params := map[string]interface{}{}
@@ -105,7 +108,10 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
 		return
 	}
-	res, err := h.auth.Refresh(c.Request.Context(), req.RefreshToken)
+	res, err := h.auth.Refresh(c.Request.Context(), req.RefreshToken, services.ClientMeta{
+		IP: c.ClientIP(),
+		UA: c.Request.UserAgent(),
+	})
 	if err != nil {
 		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthInvalidRefresh, nil)
 		return
@@ -125,7 +131,10 @@ func (h *AuthHandler) CompleteMFA(c *gin.Context) {
 		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
 		return
 	}
-	res, err := h.auth.CompleteMFA(c.Request.Context(), req.MFAToken, req.Code)
+	res, err := h.auth.CompleteMFA(c.Request.Context(), req.MFAToken, req.Code, services.ClientMeta{
+		IP: c.ClientIP(),
+		UA: c.Request.UserAgent(),
+	})
 	if err != nil {
 		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthInvalidMFA, nil)
 		return

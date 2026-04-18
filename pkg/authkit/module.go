@@ -104,10 +104,11 @@ func DefaultConfig() Config {
 }
 
 type Module struct {
-	authH  *controllers.AuthHandler
-	rbacH  *controllers.RBACHandler
-	mfaH   *controllers.MFAHandler
-	oauthH *controllers.OAuthHandler
+	authH    *controllers.AuthHandler
+	sessionH *controllers.SessionHandler
+	rbacH    *controllers.RBACHandler
+	mfaH     *controllers.MFAHandler
+	oauthH   *controllers.OAuthHandler
 
 	authMW        gin.HandlerFunc
 	teamTokenMW   gin.HandlerFunc
@@ -158,6 +159,9 @@ func (m *Module) ListUserPermissions(ctx context.Context, userID uuid.UUID) ([]s
 // UserIDFromCtx exposes the authenticated user id from Gin context (set by AuthMiddleware()).
 func UserIDFromCtx(c *gin.Context) (uuid.UUID, bool) { return middleware.UserIDFromCtx(c) }
 
+// SessionIDFromCtx exposes the login session id from the access JWT claim sid (or uuid.Nil for legacy tokens).
+func SessionIDFromCtx(c *gin.Context) uuid.UUID { return middleware.SessionIDFromCtx(c) }
+
 // AccessTokenMetaFromCtx exposes access token metadata (jti, exp) from Gin context (set by AuthMiddleware()).
 func AccessTokenMetaFromCtx(c *gin.Context) (string, time.Time, bool) {
 	return middleware.AccessTokenMetaFromCtx(c)
@@ -180,6 +184,8 @@ type AuthEndpoints struct {
 	Refresh  bool
 	Logout   bool
 	Me       bool
+	// Sessions: list device sessions, revoke one, revoke all other devices (requires sid in access JWT).
+	Sessions bool
 }
 
 type EmailEndpoints struct {
@@ -215,6 +221,7 @@ func DefaultMountOptions() MountOptions {
 			Refresh:  true,
 			Logout:   true,
 			Me:       true,
+			Sessions: true,
 		},
 		Email: EmailEndpoints{
 			ForgotPassword:      true,
@@ -355,6 +362,8 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 	}
 
 	authH := controllers.NewAuthHandler(authSvc, emailSvc, rbacSvc, userRepo, auditSvc, authLC)
+	sessionSvc := services.NewSessionService(refreshRepo, denylist)
+	sessionH := controllers.NewSessionHandler(sessionSvc, auditSvc)
 	rbacH := controllers.NewRBACHandler(rbacSvc, userAdminSvc, auditSvc)
 	mfaH := controllers.NewMFAHandler(mfaSvc, auditSvc)
 	oauthH := controllers.NewOAuthHandler(oauthSvc, authSvc, cfg.PublicBaseURL, authLC)
@@ -374,6 +383,7 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 
 	return &Module{
 		authH:       authH,
+		sessionH:    sessionH,
 		rbacH:       rbacH,
 		mfaH:        mfaH,
 		oauthH:      oauthH,
@@ -411,6 +421,11 @@ func (m *Module) MountAuth(r gin.IRouter) {
 	me.Use(m.authMW)
 	me.POST("/logout", m.authH.Logout)
 	me.GET("/me", m.authH.Me)
+	if m.sessionH != nil {
+		me.GET("/sessions", m.sessionH.List)
+		me.DELETE("/sessions/:id", m.sessionH.RevokeOne)
+		me.POST("/sessions/revoke-others", m.sessionH.RevokeOthers)
+	}
 }
 
 func (m *Module) MountEmail(r gin.IRouter) {
@@ -516,6 +531,11 @@ func (m *Module) MountWithOptions(r gin.IRouter, opt MountOptions) {
 	}
 	if opt.Auth.Me {
 		authed.GET("/me", m.authH.Me)
+	}
+	if opt.Auth.Sessions && m.sessionH != nil {
+		authed.GET("/sessions", m.sessionH.List)
+		authed.DELETE("/sessions/:id", m.sessionH.RevokeOne)
+		authed.POST("/sessions/revoke-others", m.sessionH.RevokeOthers)
 	}
 	if opt.MFA.Setup {
 		authed.POST("/mfa/setup", m.mfaH.Setup)

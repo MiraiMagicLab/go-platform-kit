@@ -18,6 +18,8 @@ const (
 	CodeAuthPasswordResetFailed = "auth.action.password_reset_fail"
 	CodeAuthEmailNotVerified    = "auth.email.not_verified"
 	CodeAuthUserBanned          = "auth.user.banned"
+	CodeSessionNotFound         = "auth.session.not_found"
+	CodeAuthSessionUnsupported  = "auth.session.no_sid_in_token"
 
 	CodeRBACCreateRoleFailed       = "rbac.action.create_role_fail"
 	CodeRBACCreatePermissionFailed = "rbac.action.create_permission_fail"
@@ -56,6 +58,8 @@ var defaultMessages = map[string]string{
 	CodeAuthPasswordResetFailed: "Could not reset password",
 	CodeAuthEmailNotVerified:    "Email address is not verified",
 	CodeAuthUserBanned:          "User is temporarily banned",
+	CodeSessionNotFound:         "Session not found or already revoked",
+	CodeAuthSessionUnsupported:  "Operation requires a session-scoped access token",
 
 	CodeRBACCreateRoleFailed:       "Could not create role",
 	CodeRBACCreatePermissionFailed: "Could not create permission",

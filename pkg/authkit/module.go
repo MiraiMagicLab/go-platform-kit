@@ -73,6 +73,8 @@ type Config struct {
 	SMTPUser string
 	SMTPPass string
 	SMTPFrom string
+	// ResetPasswordDelivery configures forgot-password email type: "otp" (default) or "link".
+	ResetPasswordDelivery string
 
 	Hooks Hooks
 }
@@ -100,6 +102,7 @@ func DefaultConfig() Config {
 		RateLimitEmailVerifyConfirmPerMinute: 10,
 		CORSAllowedOrigins:                   []string{"*"},
 		SMTPPort:                             587,
+		ResetPasswordDelivery:                "otp",
 	}
 }
 
@@ -307,7 +310,7 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 	if cfg.SMTPHost != "" && cfg.SMTPUser != "" && cfg.SMTPPass != "" && cfg.SMTPFrom != "" {
 		sender = services.NewSMTPSender(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPFrom)
 	}
-	emailSvc := services.NewEmailService(userRepo, emailTokenRepo, refreshRepo, sender, cfg.PublicBaseURL, services.EmailHooks{
+	emailSvc := services.NewEmailService(userRepo, emailTokenRepo, refreshRepo, sender, cfg.PublicBaseURL, cfg.ResetPasswordDelivery, services.EmailHooks{
 		BuildVerifyEmailLink:   cfg.Hooks.BuildVerifyEmailLink,
 		BuildResetPasswordLink: cfg.Hooks.BuildResetPasswordLink,
 		RenderVerifyEmail:      cfg.Hooks.RenderVerifyEmail,

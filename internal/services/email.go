@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/binary"
 	"fmt"
 	"net/url"
 	"time"
@@ -17,8 +18,10 @@ import (
 )
 
 const (
-	emailActionVerify = "verify_email"
-	emailActionReset  = "reset_password"
+	emailActionVerify      = "verify_email"
+	emailActionReset       = "reset_password"
+	resetDeliveryOTP  = "otp"
+	resetDeliveryLink = "link"
 )
 
 type EmailSender interface {
@@ -38,6 +41,7 @@ type EmailService struct {
 	buildResetLink  func(publicBaseURL, rawToken string) string
 	renderVerify    func(link string) (subject string, body string)
 	renderReset     func(link string) (subject string, body string)
+	resetDelivery   string
 }
 
 type EmailHooks struct {
@@ -53,6 +57,7 @@ func NewEmailService(
 	refresh *postgres.RefreshTokenRepo,
 	sender EmailSender,
 	publicBaseURL string,
+	resetPasswordDelivery string,
 	hooks EmailHooks,
 ) *EmailService {
 	if hooks.BuildVerifyEmailLink == nil {
@@ -71,8 +76,11 @@ func NewEmailService(
 		}
 	}
 	if hooks.RenderResetPassword == nil {
-		hooks.RenderResetPassword = func(link string) (string, string) {
-			return "Reset your password", "Reset your password by opening this link: " + link
+		hooks.RenderResetPassword = func(value string) (string, string) {
+			if normalizeResetDelivery(resetPasswordDelivery) == resetDeliveryLink {
+				return "Reset your password", "Reset your password by opening this link: " + value
+			}
+			return "Reset your password", "Your OTP code to reset password is: " + value
 		}
 	}
 
@@ -88,6 +96,7 @@ func NewEmailService(
 		buildResetLink:  hooks.BuildResetPasswordLink,
 		renderVerify:    hooks.RenderVerifyEmail,
 		renderReset:     hooks.RenderResetPassword,
+		resetDelivery:   normalizeResetDelivery(resetPasswordDelivery),
 	}
 }
 
@@ -128,15 +137,24 @@ func (s *EmailService) ForgotPassword(ctx context.Context, email string) error {
 		// do not leak user existence
 		return nil
 	}
-	raw, hash, err := generateToken()
+	rawValue := ""
+	hash := ""
+	if s.resetDelivery == resetDeliveryLink {
+		rawValue, hash, err = generateToken()
+	} else {
+		rawValue, hash, err = generateOTPCode()
+	}
 	if err != nil {
 		return err
 	}
 	if err := s.tokens.Create(ctx, u.ID, emailActionReset, hash, time.Now().Add(s.resetTTL)); err != nil {
 		return err
 	}
-	link := s.buildResetLink(s.publicBase, raw)
-	subject, body := s.renderReset(link)
+	deliveryValue := rawValue
+	if s.resetDelivery == resetDeliveryLink {
+		deliveryValue = s.buildResetLink(s.publicBase, rawValue)
+	}
+	subject, body := s.renderReset(deliveryValue)
 	return s.sender.Send(ctx, u.Email, subject, body)
 }
 
@@ -164,6 +182,25 @@ func generateToken() (raw string, hashed string, err error) {
 	}
 	raw = base64.RawURLEncoding.EncodeToString(b)
 	return raw, sha256hex(raw), nil
+}
+
+func generateOTPCode() (code string, hashed string, err error) {
+	var b [4]byte
+	if _, err = rand.Read(b[:]); err != nil {
+		return "", "", err
+	}
+	n := binary.BigEndian.Uint32(b[:]) % 1000000
+	code = fmt.Sprintf("%06d", n)
+	return code, sha256hex(code), nil
+}
+
+func normalizeResetDelivery(mode string) string {
+	switch mode {
+	case resetDeliveryLink:
+		return resetDeliveryLink
+	default:
+		return resetDeliveryOTP
+	}
 }
 
 func sha256hex(s string) string {

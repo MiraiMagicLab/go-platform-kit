@@ -20,6 +20,7 @@ Production-ready starter for an **authentication + authorization** service:
 - `JWT_REFRESH_SECRET` (required)
 - `DATA_ENCRYPTION_KEY_B64` (optional but recommended, base64 of 32-byte key for TOTP secret encryption)
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` (required for email verify/reset flows)
+- `RESET_PASSWORD_DELIVERY` (optional: `otp` or `link`, default `otp`)
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URL` (optional)
 - `FACEBOOK_CLIENT_ID`, `FACEBOOK_CLIENT_SECRET`, `FACEBOOK_REDIRECT_URL` (optional)
 - `PUBLIC_BASE_URL` (default `http://localhost:8080`)
@@ -42,6 +43,7 @@ cfg.SMTPPort = 587
 cfg.SMTPUser = os.Getenv("SMTP_USER")
 cfg.SMTPPass = os.Getenv("SMTP_PASS")
 cfg.SMTPFrom = os.Getenv("SMTP_FROM")
+cfg.ResetPasswordDelivery = os.Getenv("RESET_PASSWORD_DELIVERY") // otp | link
 cfg.SeedRoles = []string{"admin", "teacher", "student"}
 cfg.SeedPermissions = []string{
   "rbac.manage",
@@ -100,7 +102,8 @@ r.POST("/api/vocab", mod.AuthMiddleware(), mod.RequirePermission("vocab.create")
 
 - Keep core auth logic consistent; customize via `authkit.Config` and `authkit.Hooks`.
 - **RBAC admin permission**: `cfg.RBACAdminPermission`
-- **Email links/templates**: `cfg.Hooks.BuildVerifyEmailLink`, `cfg.Hooks.BuildResetPasswordLink`, `cfg.Hooks.RenderVerifyEmail`, `cfg.Hooks.RenderResetPassword`
+- **Email templates**: `cfg.Hooks.BuildVerifyEmailLink`, `cfg.Hooks.BuildResetPasswordLink`, `cfg.Hooks.RenderVerifyEmail`, `cfg.Hooks.RenderResetPassword`
+- **Forgot-password delivery mode**: `cfg.ResetPasswordDelivery = "otp"` (default) hoặc `"link"` tùy UX của từng dự án
 
 Example hook (custom frontend link):
 

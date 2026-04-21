@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"fmt"
-	"net/mail"
 	"net/smtp"
 )
 
@@ -22,19 +21,13 @@ func NewSMTPSender(host string, port int, user, pass, from string) *SMTPSender {
 func (s *SMTPSender) Send(_ context.Context, to, subject, body string) error {
 	addr := fmt.Sprintf("%s:%d", s.host, s.port)
 	auth := smtp.PlainAuth("", s.user, s.pass, s.host)
-	fromHeader := s.from
-	envelopeFrom := s.from
-	if parsed, err := mail.ParseAddress(s.from); err == nil {
-		fromHeader = parsed.String()
-		envelopeFrom = parsed.Address
-	}
 	msg := []byte(
-		"From: " + fromHeader + "\r\n" +
+		"From: " + s.from + "\r\n" +
 			"To: " + to + "\r\n" +
 			"Subject: " + subject + "\r\n" +
 			"MIME-Version: 1.0\r\n" +
 			"Content-Type: text/plain; charset=UTF-8\r\n\r\n" +
 			body + "\r\n",
 	)
-	return smtp.SendMail(addr, auth, envelopeFrom, []string{to}, msg)
+	return smtp.SendMail(addr, auth, s.from, []string{to}, msg)
 }

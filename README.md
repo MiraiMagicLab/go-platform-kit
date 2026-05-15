@@ -190,8 +190,10 @@ Security and reliability additions:
 - background cleanup job for expired/revoked tokens and old used recovery codes
 
 Migrations:
-- `migrations/0001_init.up.sql` / `0001_init.down.sql`
-- `migrations/0002_refresh_sessions.up.sql` / `0002_refresh_sessions.down.sql` (bảng `refresh_tokens`: `session_id`, IP/UA, `last_used_at`)
+- **Core** (all hosts): `0001_init` + `0002_refresh_sessions` — users, roles, user_roles, tokens, MFA, …
+- **RBAC tier** (control-plane only): permissions + role_permissions tables in `0001_init`; seed only when `AuthZ.Mode=rbac`
+
+Platform apps (lingo-engine, …): set `AuthZ.Mode=role` — seed roles only, no permission strings.
 
 Apply schema (recommended):
 ```bash

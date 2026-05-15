@@ -16,13 +16,13 @@ import (
 )
 
 // TeamClaims is the control-plane-issued JWT used for admin SSO (TeamToken).
-// Subject is expected to be the user UUID in the host app DB.
+// Subject is the control-plane operator user id (audit).
 type TeamClaims struct {
 	jwt.RegisteredClaims
-	WorkspaceID string   `json:"workspace_id,omitempty"`
-	AppID       string   `json:"app_id,omitempty"`
-	Roles       []string `json:"roles,omitempty"`
-	Permissions []string `json:"permissions,omitempty"`
+	WorkspaceID  string   `json:"workspace_id"`
+	AppID        string   `json:"app_id"`
+	AppAccess    string   `json:"app_access"` // read | write (required)
+	Capabilities []string `json:"capabilities"`
 }
 
 type TeamTokenVerifier struct {
@@ -87,11 +87,38 @@ func (v *TeamTokenVerifier) Middleware() gin.HandlerFunc {
 			return
 		}
 
-		// go-auth-lib's RBAC middleware reads `user_id` from Gin context.
+		if claims.AppAccess != "read" && claims.AppAccess != "write" {
+			response.Fail(c, http.StatusUnauthorized, response.CodeAuthInvalidToken, nil)
+			c.Abort()
+			return
+		}
+		if len(claims.Capabilities) == 0 {
+			response.Fail(c, http.StatusUnauthorized, response.CodeAuthInvalidToken, nil)
+			c.Abort()
+			return
+		}
+
+		wsID, err := uuid.Parse(claims.WorkspaceID)
+		if err != nil {
+			response.Fail(c, http.StatusUnauthorized, response.CodeAuthInvalidToken, nil)
+			c.Abort()
+			return
+		}
+		appID, err := uuid.Parse(claims.AppID)
+		if err != nil {
+			response.Fail(c, http.StatusUnauthorized, response.CodeAuthInvalidToken, nil)
+			c.Abort()
+			return
+		}
+
 		c.Set("user_id", subjectUUID)
-		// Keep extra debug/compat fields (optional use by host apps).
-		c.Set("controlplane_subject", claims.Subject)
-		c.Set("controlplane_permissions", claims.Permissions)
+		setTeamAuth(c, TeamAuth{
+			ActorUserID:  subjectUUID,
+			WorkspaceID:  wsID,
+			AppID:        appID,
+			AppAccess:    claims.AppAccess,
+			Capabilities: claims.Capabilities,
+		})
 		c.Next()
 	}
 }

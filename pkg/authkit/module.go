@@ -77,6 +77,8 @@ type Config struct {
 	ResetPasswordDelivery string
 
 	Hooks Hooks
+
+	AuthZ AuthZConfig
 }
 
 func DefaultConfig() Config {
@@ -103,6 +105,7 @@ func DefaultConfig() Config {
 		CORSAllowedOrigins:                   []string{"*"},
 		SMTPPort:                             587,
 		ResetPasswordDelivery:                "otp",
+		AuthZ:                                AuthZConfig{Mode: AuthZRbac},
 	}
 }
 
@@ -266,7 +269,10 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 	if cfg.RBACAdminPermission == "" {
 		cfg.RBACAdminPermission = "rbac.manage"
 	}
-	if err := seedRBAC(context.Background(), pg, cfg); err != nil {
+	if err := cfg.AuthZ.validate(); err != nil {
+		return nil, err
+	}
+	if err := seedAuthZ(context.Background(), pg, cfg); err != nil {
 		return nil, err
 	}
 
@@ -634,7 +640,7 @@ func containsOrigin(allowed map[string]struct{}, origin string) bool {
 	return ok
 }
 
-func seedRBAC(ctx context.Context, pg *pgxpool.Pool, cfg Config) error {
+func seedAuthZ(ctx context.Context, pg *pgxpool.Pool, cfg Config) error {
 	for _, role := range cfg.SeedRoles {
 		if role == "" {
 			continue
@@ -642,6 +648,9 @@ func seedRBAC(ctx context.Context, pg *pgxpool.Pool, cfg Config) error {
 		if _, err := pg.Exec(ctx, `INSERT INTO roles (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`, role); err != nil {
 			return fmt.Errorf("seed role %q: %w", role, err)
 		}
+	}
+	if !cfg.AuthZ.usesRBAC() {
+		return nil
 	}
 	for _, perm := range cfg.SeedPermissions {
 		if perm == "" {

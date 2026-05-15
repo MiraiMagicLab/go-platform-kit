@@ -40,6 +40,7 @@ func main() {
 	}
 
 	cfg := authkit.DefaultConfig()
+	cfg.AuthZ = authkit.AuthZConfig{Mode: authkit.AuthZRbac}
 	cfg.JWTAccessSecret = jwtAccess
 	cfg.JWTRefreshSecret = jwtRefresh
 	cfg.Issuer = getEnv("JWT_ISSUER", "my-embedded-app")

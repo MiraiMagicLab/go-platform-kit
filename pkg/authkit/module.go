@@ -21,6 +21,7 @@ import (
 	"github.com/MiraiMagicLab/go-auth-lib/internal/repositories/postgres"
 	"github.com/MiraiMagicLab/go-auth-lib/internal/security"
 	"github.com/MiraiMagicLab/go-auth-lib/internal/services"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/utils"
 	"github.com/MiraiMagicLab/go-auth-lib/pkg/token"
 )
 
@@ -47,6 +48,10 @@ type Config struct {
 	FacebookRedirectURL  string
 
 	PublicBaseURL string
+	// FrontendBaseURL is the base URL of the frontend application.
+	// Used by the OAuth callback to redirect the browser to the frontend with tokens.
+	// Example: "https://app.tako-go.xyz" or "http://localhost:3000"
+	FrontendBaseURL string
 	// 32-byte key encoded in base64 for encrypting sensitive data (e.g. TOTP secret).
 	DataEncryptionKeyB64 string
 
@@ -79,6 +84,22 @@ type Config struct {
 	Hooks Hooks
 
 	AuthZ AuthZConfig
+
+	// v1.1: Account lock
+	MaxFailedLoginAttempts int
+	AccountLockDuration    time.Duration
+
+	// v1.1: Admin bypass
+	AdminBypassPermission bool
+
+	// v1.1: MFA disable security
+	RequirePasswordForMFADisable bool
+
+	// v1.1: OAuth cookie hardening (set true in production with HTTPS)
+	OAuthCookieSecure bool
+
+	// v1.1: Custom email validator (nil = use utils.DefaultEmailValidator)
+	EmailValidator utils.EmailValidator
 }
 
 func DefaultConfig() Config {
@@ -106,6 +127,11 @@ func DefaultConfig() Config {
 		SMTPPort:                             587,
 		ResetPasswordDelivery:                "otp",
 		AuthZ:                                AuthZConfig{Mode: AuthZRbac},
+		MaxFailedLoginAttempts:               5,
+		AccountLockDuration:                  15 * time.Minute,
+		AdminBypassPermission:                true,
+		RequirePasswordForMFADisable:         true,
+		OAuthCookieSecure:                    false,
 	}
 }
 
@@ -119,6 +145,7 @@ type Module struct {
 	authMW        gin.HandlerFunc
 	teamTokenMW   gin.HandlerFunc
 	rbacSvc       *services.RBACService
+	emailSvc      *services.EmailService
 	cleanup       *services.CleanupService
 	redis         *redis.Client
 	cfg           Config
@@ -138,12 +165,26 @@ func (m *Module) TeamTokenMiddleware() gin.HandlerFunc { return m.teamTokenMW }
 // RequirePermission returns a middleware that checks a dynamic RBAC permission string.
 // Usage: `r.GET("/path", mod.AuthMiddleware(), mod.RequirePermission("vocab.read"), handler)`
 func (m *Module) RequirePermission(permission string) gin.HandlerFunc {
-	return middleware.RequirePermission(m.rbacSvc, permission)
+	return middleware.RequirePermission(m.rbacSvc, permission, m.cfg.AdminBypassPermission)
+}
+
+// RequirePermissionNoBypass returns a middleware that checks a permission without admin bypass.
+func (m *Module) RequirePermissionNoBypass(permission string) gin.HandlerFunc {
+	return middleware.RequirePermission(m.rbacSvc, permission, false)
 }
 
 // RequireRBACAdmin returns a middleware that checks `cfg.RBACAdminPermission` (default: "rbac.manage").
 func (m *Module) RequireRBACAdmin() gin.HandlerFunc {
-	return middleware.RequirePermission(m.rbacSvc, m.cfg.RBACAdminPermission)
+	return middleware.RequirePermission(m.rbacSvc, m.cfg.RBACAdminPermission, m.cfg.AdminBypassPermission)
+}
+
+// RequestVerifyEmail programmatically requests a verification email for a user.
+// Returns an error if the email sender is not configured or the user does not exist.
+func (m *Module) RequestVerifyEmail(ctx context.Context, userID uuid.UUID) error {
+	if m.emailSvc == nil {
+		return errors.New("authkit: email service not configured")
+	}
+	return m.emailSvc.RequestVerifyEmail(ctx, userID)
 }
 
 // ListUserRoles returns current roles for a user (from app DB).
@@ -214,6 +255,7 @@ type RBACEndpoints struct {
 	AssignUserRoles   bool
 	BanUser           bool
 	UnbanUser         bool
+	DeleteUser        bool
 	ListUsers         bool
 }
 
@@ -248,6 +290,7 @@ func DefaultMountOptions() MountOptions {
 			AssignUserRoles:   true,
 			BanUser:           true,
 			UnbanUser:         true,
+			DeleteUser:        true,
 			ListUsers:         true,
 		},
 	}
@@ -279,6 +322,7 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 	repos := postgres.NewRepos(pg)
 	userRepo := repos.User
 	refreshRepo := repos.RefreshToken
+	sessionsRepo := repos.Sessions
 	rbacRepo := repos.RBAC
 	identityRepo := repos.Identity
 	mfaRepo := repos.MFA
@@ -333,6 +377,8 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 		cfg.RefreshTokenTTL,
 		cfg.Issuer,
 		cfg.RequireEmailVerifiedBeforeLogin,
+		cfg.MaxFailedLoginAttempts,
+		cfg.AccountLockDuration,
 	)
 
 	var googleCfg *oauth2.Config
@@ -361,21 +407,27 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 	oauthSvc := services.NewOAuthService(identityRepo, userRepo, googleCfg, facebookCfg)
 
 	var authLC *controllers.AuthLifecycle
-	if cfg.Hooks.AfterSessionIssued != nil {
-		hook := cfg.Hooks.AfterSessionIssued
-		authLC = &controllers.AuthLifecycle{
-			AfterSessionIssued: func(ctx context.Context, reason string, userID uuid.UUID, email *string, ip, ua string) {
-				hook(ctx, SessionIssuedReason(reason), userID, email, ip, ua)
-			},
-		}
+	esvc := emailSvc // capture for closure
+	sessionHook := cfg.Hooks.AfterSessionIssued
+	authLC = &controllers.AuthLifecycle{
+		AfterSessionIssued: func(ctx context.Context, reason string, userID uuid.UUID, email *string, ip, ua string) {
+			if sessionHook != nil {
+				sessionHook(ctx, SessionIssuedReason(reason), userID, email, ip, ua)
+			}
+			// Default: send verification email on register when no custom hook is provided.
+			// AfterSessionIssued fires for login/OAuth/MFA too — email is nil there, so this is safe.
+			if reason == "register" && sessionHook == nil && esvc != nil {
+				_ = esvc.RequestVerifyEmail(ctx, userID)
+			}
+		},
 	}
 
-	authH := controllers.NewAuthHandler(authSvc, emailSvc, rbacSvc, userRepo, auditSvc, authLC)
-	sessionSvc := services.NewSessionService(refreshRepo, denylist)
+	authH := controllers.NewAuthHandler(authSvc, emailSvc, rbacSvc, userRepo, auditSvc, authLC, cfg.EmailValidator)
+	sessionSvc := services.NewSessionService(sessionsRepo, refreshRepo, denylist)
 	sessionH := controllers.NewSessionHandler(sessionSvc, auditSvc)
 	rbacH := controllers.NewRBACHandler(rbacSvc, userAdminSvc, auditSvc)
-	mfaH := controllers.NewMFAHandler(mfaSvc, auditSvc)
-	oauthH := controllers.NewOAuthHandler(oauthSvc, authSvc, cfg.PublicBaseURL, authLC)
+	mfaH := controllers.NewMFAHandler(mfaSvc, auditSvc, userRepo)
+	oauthH := controllers.NewOAuthHandler(oauthSvc, authSvc, "/auth", cfg.FrontendBaseURL, cfg.OAuthCookieSecure, authLC)
 
 	authMW := middleware.JWTAuth(jwtm, userRepo, func(ctx *gin.Context, jti string) (bool, error) {
 		return denylist.IsDenied(ctx.Request.Context(), jti)
@@ -399,6 +451,7 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 		authMW:      authMW,
 		teamTokenMW: teamTokenMW,
 		rbacSvc:     rbacSvc,
+		emailSvc:    emailSvc,
 		cleanup:     cleanupSvc,
 		redis:       redisClient,
 		cfg:         cfg,
@@ -467,13 +520,14 @@ func (m *Module) MountOAuth(r gin.IRouter) {
 func (m *Module) MountRBAC(r gin.IRouter) {
 	rbac := r.Group("/")
 	rbac.Use(m.authMW)
-	rbac.Use(middleware.RequirePermission(m.rbacSvc, m.cfg.RBACAdminPermission))
+	rbac.Use(middleware.RequirePermission(m.rbacSvc, m.cfg.RBACAdminPermission, m.cfg.AdminBypassPermission))
 	rbac.POST("/roles", m.rbacH.CreateRole)
 	rbac.POST("/permissions", m.rbacH.CreatePermission)
 	rbac.POST("/roles/:id/permissions", m.rbacH.AssignPermissionsToRole)
 	rbac.POST("/users/:id/roles", m.rbacH.AssignRolesToUser)
 	rbac.POST("/users/:id/ban", m.rbacH.BanUser)
 	rbac.POST("/users/:id/unban", m.rbacH.UnbanUser)
+	rbac.DELETE("/users/:id", m.rbacH.DeleteUser)
 	rbac.GET("/users", m.rbacH.ListUsers)
 }
 
@@ -560,10 +614,10 @@ func (m *Module) MountWithOptions(r gin.IRouter, opt MountOptions) {
 	}
 
 	// RBAC admin group
-	if opt.RBAC.ManageRoles || opt.RBAC.ManagePermissions || opt.RBAC.AssignRolePerms || opt.RBAC.AssignUserRoles || opt.RBAC.BanUser || opt.RBAC.UnbanUser {
+	if opt.RBAC.ManageRoles || opt.RBAC.ManagePermissions || opt.RBAC.AssignRolePerms || opt.RBAC.AssignUserRoles || opt.RBAC.BanUser || opt.RBAC.UnbanUser || opt.RBAC.DeleteUser {
 		rbac := r.Group("/")
 		rbac.Use(m.authMW)
-		rbac.Use(middleware.RequirePermission(m.rbacSvc, m.cfg.RBACAdminPermission))
+		rbac.Use(middleware.RequirePermission(m.rbacSvc, m.cfg.RBACAdminPermission, m.cfg.AdminBypassPermission))
 		if opt.RBAC.ManageRoles {
 			rbac.POST("/roles", m.rbacH.CreateRole)
 		}
@@ -581,6 +635,9 @@ func (m *Module) MountWithOptions(r gin.IRouter, opt MountOptions) {
 		}
 		if opt.RBAC.UnbanUser {
 			rbac.POST("/users/:id/unban", m.rbacH.UnbanUser)
+		}
+		if opt.RBAC.DeleteUser {
+			rbac.DELETE("/users/:id", m.rbacH.DeleteUser)
 		}
 		if opt.RBAC.ListUsers {
 			rbac.GET("/users", m.rbacH.ListUsers)

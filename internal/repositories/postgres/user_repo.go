@@ -53,20 +53,20 @@ func (r *UserRepo) CreateOAuthUser(ctx context.Context, email, passwordHash stri
 func (r *UserRepo) GetByEmail(ctx context.Context, email string) (UserDTO, error) {
 	var u UserDTO
 	err := r.db.QueryRow(ctx, `
-		SELECT id, email, password_hash, email_verified, password_login_enabled, banned_until, ban_reason, token_version, created_at, updated_at
+		SELECT id, email, password_hash, email_verified, password_login_enabled, banned_until, ban_reason, token_version, failed_login_count, locked_until, deleted_at, created_at, updated_at
 		FROM users
-		WHERE email = $1
-	`, email).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.EmailVerified, &u.PasswordLoginEnabled, &u.BannedUntil, &u.BanReason, &u.TokenVersion, &u.CreatedAt, &u.UpdatedAt)
+		WHERE email = $1 AND deleted_at IS NULL
+	`, email).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.EmailVerified, &u.PasswordLoginEnabled, &u.BannedUntil, &u.BanReason, &u.TokenVersion, &u.FailedLoginCount, &u.LockedUntil, &u.DeletedAt, &u.CreatedAt, &u.UpdatedAt)
 	return u, err
 }
 
 func (r *UserRepo) GetByID(ctx context.Context, id uuid.UUID) (UserDTO, error) {
 	var u UserDTO
 	err := r.db.QueryRow(ctx, `
-		SELECT id, email, password_hash, email_verified, password_login_enabled, banned_until, ban_reason, token_version, created_at, updated_at
+		SELECT id, email, password_hash, email_verified, password_login_enabled, banned_until, ban_reason, token_version, failed_login_count, locked_until, deleted_at, created_at, updated_at
 		FROM users
-		WHERE id = $1
-	`, id).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.EmailVerified, &u.PasswordLoginEnabled, &u.BannedUntil, &u.BanReason, &u.TokenVersion, &u.CreatedAt, &u.UpdatedAt)
+		WHERE id = $1 AND deleted_at IS NULL
+	`, id).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.EmailVerified, &u.PasswordLoginEnabled, &u.BannedUntil, &u.BanReason, &u.TokenVersion, &u.FailedLoginCount, &u.LockedUntil, &u.DeletedAt, &u.CreatedAt, &u.UpdatedAt)
 	return u, err
 }
 
@@ -83,9 +83,8 @@ func (r *UserRepo) IncrementTokenVersion(ctx context.Context, userID uuid.UUID) 
 func (r *UserRepo) SetPassword(ctx context.Context, userID uuid.UUID, passwordHash string) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE users
-		SET password_hash = $2,
-		    updated_at = NOW()
-		WHERE id = $1
+		SET password_hash = $2
+		WHERE id = $1 AND deleted_at IS NULL
 	`, userID, passwordHash)
 	return err
 }
@@ -93,9 +92,8 @@ func (r *UserRepo) SetPassword(ctx context.Context, userID uuid.UUID, passwordHa
 func (r *UserRepo) SetEmailVerified(ctx context.Context, userID uuid.UUID, verified bool) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE users
-		SET email_verified = $2,
-		    updated_at = NOW()
-		WHERE id = $1
+		SET email_verified = $2
+		WHERE id = $1 AND deleted_at IS NULL
 	`, userID, verified)
 	return err
 }
@@ -105,8 +103,9 @@ func (r *UserRepo) SetBan(ctx context.Context, userID uuid.UUID, bannedUntil *ti
 		UPDATE users
 		SET banned_until = $2,
 		    ban_reason = NULLIF($3, ''),
-		    updated_at = NOW()
-		WHERE id = $1
+		    failed_login_count = 0,
+		    locked_until = NULL
+		WHERE id = $1 AND deleted_at IS NULL
 	`, userID, bannedUntil, reason)
 	return err
 }
@@ -181,7 +180,7 @@ func (r *UserRepo) ListUsers(ctx context.Context, page, pageSize int, f ListUser
 
 	args = append(args, pageSize, offset)
 	dataQuery := fmt.Sprintf(`
-		SELECT id, email, password_hash, email_verified, password_login_enabled, banned_until, ban_reason, token_version, created_at, updated_at
+		SELECT id, email, password_hash, email_verified, password_login_enabled, banned_until, ban_reason, token_version, failed_login_count, locked_until, deleted_at, created_at, updated_at
 		FROM users
 		%s
 		ORDER BY %s %s
@@ -197,7 +196,7 @@ func (r *UserRepo) ListUsers(ctx context.Context, page, pageSize int, f ListUser
 	var users []UserDTO
 	for rows.Next() {
 		var u UserDTO
-		err := rows.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.EmailVerified, &u.PasswordLoginEnabled, &u.BannedUntil, &u.BanReason, &u.TokenVersion, &u.CreatedAt, &u.UpdatedAt)
+		err := rows.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.EmailVerified, &u.PasswordLoginEnabled, &u.BannedUntil, &u.BanReason, &u.TokenVersion, &u.FailedLoginCount, &u.LockedUntil, &u.DeletedAt, &u.CreatedAt, &u.UpdatedAt)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -206,3 +205,42 @@ func (r *UserRepo) ListUsers(ctx context.Context, page, pageSize int, f ListUser
 
 	return users, total, nil
 }
+
+func (r *UserRepo) IncrementFailedLogin(ctx context.Context, userID uuid.UUID) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE users
+		SET failed_login_count = failed_login_count + 1
+		WHERE id = $1 AND deleted_at IS NULL
+	`, userID)
+	return err
+}
+
+func (r *UserRepo) ResetFailedLogin(ctx context.Context, userID uuid.UUID) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE users
+		SET failed_login_count = 0, locked_until = NULL
+		WHERE id = $1 AND deleted_at IS NULL
+	`, userID)
+	return err
+}
+
+func (r *UserRepo) SetLock(ctx context.Context, userID uuid.UUID, until time.Time) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE users
+		SET locked_until = $2
+		WHERE id = $1 AND deleted_at IS NULL
+	`, userID, until)
+	return err
+}
+
+func (r *UserRepo) SoftDelete(ctx context.Context, userID uuid.UUID) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE users
+		SET deleted_at = NOW(),
+		    email = email || '_deleted_' || NOW()::text,
+		    token_version = token_version + 1
+		WHERE id = $1 AND deleted_at IS NULL
+	`, userID)
+	return err
+}
+

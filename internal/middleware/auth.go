@@ -123,6 +123,18 @@ func JWTAuth(jwtm *token.JWTManager, users *postgres.UserRepo, denylistFn func(c
 			c.Abort()
 			return
 		}
+		if u.LockedUntil != nil && time.Now().Before(*u.LockedUntil) {
+			response.Fail(c, http.StatusForbidden, response.CodeAuthAccountLocked, map[string]interface{}{
+				"locked_until": u.LockedUntil.UTC().Format("2006-01-02T15:04:05Z"),
+			})
+			c.Abort()
+			return
+		}
+		if u.DeletedAt != nil {
+			response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
+			c.Abort()
+			return
+		}
 
 		c.Set(ctxUserIDKey, userID)
 		c.Set(ctxAccessJTIKey, claims.ID)

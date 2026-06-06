@@ -16,6 +16,9 @@ type UserDTO struct {
 	BannedUntil          *time.Time
 	BanReason            *string
 	TokenVersion         int
+	FailedLoginCount     int
+	LockedUntil          *time.Time
+	DeletedAt            *time.Time
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 }
@@ -31,7 +34,20 @@ type RefreshTokenDTO struct {
 	CreatedAt     time.Time
 	IPAddress     *string
 	UserAgent     *string
+	DeviceName    *string
 	LastUsedAt    time.Time
+}
+
+// SessionRow represents a login session (device/browser) from the sessions table.
+type SessionRow struct {
+	ID         uuid.UUID
+	UserID     uuid.UUID
+	DeviceName *string
+	IPAddress  *string
+	UserAgent  *string
+	CreatedAt  time.Time
+	LastSeenAt time.Time
+	RevokedAt  *time.Time
 }
 
 // SessionListRow is one logical login session (device/browser), backed by the active refresh token in its chain.
@@ -43,6 +59,7 @@ type SessionListRow struct {
 	IPAddress  string
 	UserAgent  string
 	ExpiresAt  time.Time
+	DeviceName string
 }
 
 type RotateResult struct {

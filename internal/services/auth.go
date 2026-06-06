@@ -20,6 +20,13 @@ var (
 	ErrInvalidRefresh     = errors.New("invalid refresh token")
 )
 
+// ErrAccountLocked is returned when the account is temporarily locked due to too many failed attempts.
+type ErrAccountLocked struct {
+	Until *time.Time
+}
+
+func (e ErrAccountLocked) Error() string { return "account is locked" }
+
 // ClientMeta carries client connection info stored on refresh-token / session rows (IP, User-Agent).
 type ClientMeta struct {
 	IP string
@@ -44,10 +51,8 @@ type AuthService struct {
 	refreshTTL           time.Duration
 	issuer               string
 	requireEmailVerified bool
-}
-
-type MFAVerifier interface {
-	Verify(ctx context.Context, userID uuid.UUID, otpCodeOrRecovery string) (bool, error)
+	maxFailedAttempts   int
+	lockDuration         time.Duration
 }
 
 func NewAuthService(
@@ -61,9 +66,17 @@ func NewAuthService(
 	refreshTTL time.Duration,
 	issuer string,
 	requireEmailVerified bool,
+	maxFailedAttempts int,
+	lockDuration time.Duration,
 ) *AuthService {
 	if denylist == nil {
 		denylist = NoopAccessTokenDenylist{}
+	}
+	if maxFailedAttempts <= 0 {
+		maxFailedAttempts = 5
+	}
+	if lockDuration <= 0 {
+		lockDuration = 15 * time.Minute
 	}
 	return &AuthService{
 		users:                users,
@@ -76,12 +89,18 @@ func NewAuthService(
 		refreshTTL:           refreshTTL,
 		issuer:               issuer,
 		requireEmailVerified: requireEmailVerified,
+		maxFailedAttempts:    maxFailedAttempts,
+		lockDuration:         lockDuration,
 	}
 }
 
 type ErrEmailNotVerified struct{}
 
 func (e ErrEmailNotVerified) Error() string { return "email not verified" }
+
+type MFAVerifier interface {
+	Verify(ctx context.Context, userID uuid.UUID, otpCodeOrRecovery string) (bool, error)
+}
 
 func (s *AuthService) Register(ctx context.Context, email, password string) (userID uuid.UUID, err error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -111,21 +130,39 @@ func (s *AuthService) Login(ctx context.Context, email, password string, meta Cl
 	if isUserBanned(u.BannedUntil) {
 		return LoginResult{}, ErrUserBanned{Until: u.BannedUntil, Reason: u.BanReason}
 	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
+	if isAccountLocked(u.LockedUntil) {
+		return LoginResult{}, ErrAccountLocked{Until: u.LockedUntil}
+	}
+	if isUserDeleted(u.DeletedAt) {
 		return LoginResult{}, ErrInvalidCredentials
 	}
 
-	return s.StartSession(ctx, u.ID, meta)
+	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
+		_ = s.users.IncrementFailedLogin(ctx, u.ID)
+		u2, getErr := s.users.GetByID(ctx, u.ID)
+		if getErr == nil && u2.FailedLoginCount+1 >= s.maxFailedAttempts {
+			_ = s.users.SetLock(ctx, u.ID, time.Now().Add(s.lockDuration))
+		}
+		return LoginResult{}, ErrInvalidCredentials
+	}
+
+	_ = s.users.ResetFailedLogin(ctx, u.ID)
+	return s.StartSession(ctx, u.ID, meta, "")
 }
 
-func (s *AuthService) StartSession(ctx context.Context, userID uuid.UUID, meta ClientMeta) (LoginResult, error) {
+func (s *AuthService) StartSession(ctx context.Context, userID uuid.UUID, meta ClientMeta, deviceName string) (LoginResult, error) {
 	u, err := s.users.GetByID(ctx, userID)
 	if err != nil {
 		return LoginResult{}, ErrInvalidCredentials
 	}
 	if isUserBanned(u.BannedUntil) {
 		return LoginResult{}, ErrUserBanned{Until: u.BannedUntil, Reason: u.BanReason}
+	}
+	if isAccountLocked(u.LockedUntil) {
+		return LoginResult{}, ErrAccountLocked{Until: u.LockedUntil}
+	}
+	if isUserDeleted(u.DeletedAt) {
+		return LoginResult{}, ErrInvalidCredentials
 	}
 	if s.requireEmailVerified && !u.EmailVerified {
 		return LoginResult{}, ErrEmailNotVerified{}
@@ -159,7 +196,7 @@ func (s *AuthService) StartSession(ctx context.Context, userID uuid.UUID, meta C
 	}
 
 	hash := hashToken(refresh)
-	if _, err := s.refreshRepo.Create(ctx, u.ID, sessionID, hash, time.Now().Add(s.refreshTTL), meta.IP, meta.UA); err != nil {
+	if _, err := s.refreshRepo.Create(ctx, u.ID, sessionID, hash, time.Now().Add(s.refreshTTL), meta.IP, meta.UA, deviceName); err != nil {
 		return LoginResult{}, err
 	}
 
@@ -202,10 +239,10 @@ func (s *AuthService) CompleteMFA(ctx context.Context, mfaToken string, otpOrRec
 		return LoginResult{}, ErrInvalidCredentials
 	}
 
-	return s.StartSession(ctx, userID, meta)
+	return s.StartSession(ctx, userID, meta, "")
 }
 
-func (s *AuthService) Refresh(ctx context.Context, refreshToken string, meta ClientMeta) (LoginResult, error) {
+func (s *AuthService) Refresh(ctx context.Context, refreshToken string, meta ClientMeta, deviceName string) (LoginResult, error) {
 	claims, err := s.jwt.ParseRefresh(refreshToken)
 	if err != nil {
 		return LoginResult{}, ErrInvalidRefresh
@@ -249,7 +286,7 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string, meta Cli
 	}
 	newHash := hashToken(newRefresh)
 
-	rotateRes, err := s.refreshRepo.Rotate(ctx, rtHash, newHash, time.Now().Add(s.refreshTTL), meta.IP, meta.UA)
+	rotateRes, err := s.refreshRepo.Rotate(ctx, rtHash, newHash, time.Now().Add(s.refreshTTL), meta.IP, meta.UA, deviceName)
 	if err != nil {
 		return LoginResult{}, ErrInvalidRefresh
 	}
@@ -297,4 +334,12 @@ func hashToken(raw string) string {
 
 func isUserBanned(until *time.Time) bool {
 	return until != nil && time.Now().Before(*until)
+}
+
+func isAccountLocked(until *time.Time) bool {
+	return until != nil && time.Now().Before(*until)
+}
+
+func isUserDeleted(deletedAt *time.Time) bool {
+	return deletedAt != nil
 }

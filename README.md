@@ -172,7 +172,24 @@ RBAC:
 - `POST /users/:id/roles`
 - `POST /users/:id/ban` (body: `{ "banned_until": "<RFC3339>", "reason": "..." }`)
 - `POST /users/:id/unban`
+- `DELETE /users/:id` — soft delete (sets `deleted_at`, revokes all sessions and bumps `token_version`)
 - `GET /users` (query: `page`, `pageSize`, `search`, `email`, `email_verified`, `password_login_enabled`, `is_banned`, `created_from`, `created_to`, `sort_by=email|created_at|updated_at`, `sort_order=asc|desc`)
+
+### v1.1 New Features
+
+- **Account lock**: Brute-force protection via `failed_login_count` + `locked_until` columns. Configurable via `MaxFailedLoginAttempts` (default 5) and `AccountLockDuration` (default 15m).
+- **Sessions table**: Authoritative `sessions` table tracks login devices separately from refresh token rows. Supports `sessions.id` as `sid` in JWTs.
+- **Soft delete users**: `DELETE /users/:id` marks the user as deleted (`deleted_at`), invalidating all active sessions. Hard deletes are blocked by a DB trigger.
+- **Admin bypass**: Users with the `admin` role bypass all RBAC permission checks when `AdminBypassPermission` is `true` (default).
+- **OAuth cookie hardening**: OAuth state cookie uses `SameSite=Lax`, `HttpOnly`, configurable `Secure` flag, and auth-mount `Path`.
+- **MFA disable verification**: `POST /mfa/disable` now requires either `password` or `code` in the request body.
+- **Email validation**: Register validates email via `net/mail.ParseAddress` + RFC 5321 length checks instead of naive `strings.Contains("@")`.
+- **Audit log partitioning**: Migration `0011` converts `audit_logs` to monthly range partitions (ready for pg_partman automation).
+- **Updated `updated_at` trigger**: All `users` column updates now automatically bump `updated_at`.
+- **CITEXT email**: `users.email` is `CITEXT` for case-insensitive uniqueness (migration `0004`).
+- **Device name**: `refresh_tokens` and `sessions` track parsed `device_name` from User-Agent (e.g. "Chrome on Windows").
+- **Permission cache invalidation**: Assigning permissions to a role invalidates the cache for all users in that role.
+- **Timing-attack mitigation**: `ForgotPassword` returns in constant ~50ms even when email not found.
 
 Dynamic roles/permissions can be bootstrapped from host project via:
 - `cfg.SeedRoles`
@@ -199,6 +216,22 @@ Apply schema (recommended):
 ```bash
 psql "$DATABASE_URL" -f migrations/0001_init.up.sql
 psql "$DATABASE_URL" -f migrations/0002_refresh_sessions.up.sql
+```
+
+For v1.1 upgrades, run remaining migrations in order:
+```bash
+psql "$DATABASE_URL" -f migrations/0003_updated_at_trigger.up.sql
+psql "$DATABASE_URL" -f migrations/0004_citext_email.up.sql
+psql "$DATABASE_URL" -f migrations/0005_email_tokens_composite_index.up.sql
+psql "$DATABASE_URL" -f migrations/0006_recovery_code_unique.up.sql
+psql "$DATABASE_URL" -f migrations/0007_refresh_token_device_name.up.sql
+psql "$DATABASE_URL" -f migrations/0008_sessions_table.up.sql
+# Backfill existing sessions (idempotent):
+psql "$DATABASE_URL" -f migrations/0008_sessions_backfill.sql
+psql "$DATABASE_URL" -f migrations/0009_account_lock.up.sql
+psql "$DATABASE_URL" -f migrations/0010_soft_delete.up.sql
+# Partitioning (requires pg_partman or manual partition management):
+psql "$DATABASE_URL" -f migrations/0011_audit_partition.up.sql
 ```
 
 ### Security notes

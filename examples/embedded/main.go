@@ -56,6 +56,19 @@ func main() {
 	cfg.PublicBaseURL = getEnv("PUBLIC_BASE_URL", "http://localhost:8080")
 	cfg.DataEncryptionKeyB64 = os.Getenv("DATA_ENCRYPTION_KEY_B64")
 
+	// v1.1: Account lock
+	cfg.MaxFailedLoginAttempts = 5
+	cfg.AccountLockDuration = mustDuration(getEnv("ACCOUNT_LOCK_DURATION", "15m"))
+
+	// v1.1: Admin bypass (admin role skips permission checks)
+	cfg.AdminBypassPermission = true
+
+	// v1.1: MFA disable requires password or code verification
+	cfg.RequirePasswordForMFADisable = true
+
+	// v1.1: OAuth cookie security (set true in production)
+	cfg.OAuthCookieSecure = false
+
 	mod, err := authkit.New(cfg, pg, rdb)
 	if err != nil {
 		log.Fatal(err)

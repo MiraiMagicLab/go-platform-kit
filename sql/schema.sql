@@ -1,10 +1,18 @@
--- Enable UUID generation (pgcrypto provides gen_random_uuid()).
+-- go-auth-lib v1.1 Schema
+-- Cumulative schema: run this instead of individual migrations for new installs.
+-- For existing installations, run migrations/0001_init.up.sql through 0011_audit_partition.up.sql in order.
+--
+-- NOTE: audit_logs partitioning (0011) requires pg_partman or manual partition setup.
+-- For new installs, you may apply 0011 after this schema.
+
+-- Enable UUID generation + citext for case-insensitive email.
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS citext;
 
 -- USERS
 CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  email TEXT NOT NULL UNIQUE,
+  email CITEXT NOT NULL,
   password_hash TEXT NOT NULL,
   email_verified BOOLEAN NOT NULL DEFAULT false,
   password_login_enabled BOOLEAN NOT NULL DEFAULT true,
@@ -12,10 +20,29 @@ CREATE TABLE IF NOT EXISTS users (
   ban_reason TEXT NULL,
   token_version INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  -- v1.1: account lock
+  failed_login_count INT NOT NULL DEFAULT 0,
+  locked_until TIMESTAMPTZ NULL,
+  -- v1.1: soft delete
+  deleted_at TIMESTAMPTZ NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
+-- v1.1: updated_at trigger (also covers locked_until changes via updated_at)
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_users_updated_at
+  BEFORE UPDATE ON users
+  FOR EACH ROW
+  EXECUTE FUNCTION set_updated_at();
 
 -- ROLES
 CREATE TABLE IF NOT EXISTS roles (
@@ -53,11 +80,29 @@ CREATE TABLE IF NOT EXISTS role_permissions (
 CREATE INDEX IF NOT EXISTS idx_role_permissions_role_id ON role_permissions(role_id);
 CREATE INDEX IF NOT EXISTS idx_role_permissions_permission_id ON role_permissions(permission_id);
 
+-- v1.1: SESSIONS (authoritative login device entity)
+CREATE TABLE IF NOT EXISTS sessions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  device_name TEXT NULL,
+  ip_address TEXT NULL,
+  user_agent TEXT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  revoked_at TIMESTAMPTZ NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_user_active ON sessions(user_id, revoked_at)
+  WHERE revoked_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_sessions_device_name ON sessions(user_id, device_name)
+  WHERE device_name IS NOT NULL;
+
 -- REFRESH TOKENS (rotation + revocation)
 CREATE TABLE IF NOT EXISTS refresh_tokens (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  session_id UUID NOT NULL,
+  session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
   token_hash TEXT NOT NULL UNIQUE,
   expires_at TIMESTAMPTZ NOT NULL,
   revoked_at TIMESTAMPTZ NULL,
@@ -65,6 +110,7 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
   replaced_by UUID NULL REFERENCES refresh_tokens(id),
   ip_address TEXT NULL,
   user_agent TEXT NULL,
+  device_name TEXT NULL,
   last_used_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -75,13 +121,15 @@ CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token_hash ON refresh_tokens(token
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_session_active ON refresh_tokens(user_id, session_id)
   WHERE revoked_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_device_name ON refresh_tokens(user_id, device_name)
+  WHERE device_name IS NOT NULL;
 
 -- OAUTH / SOCIAL IDENTITIES
 CREATE TABLE IF NOT EXISTS user_identities (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  provider TEXT NOT NULL, -- e.g. 'google', 'facebook'
-  provider_subject TEXT NOT NULL, -- provider user id (sub)
+  provider TEXT NOT NULL,
+  provider_subject TEXT NOT NULL,
   email TEXT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (provider, provider_subject),
@@ -109,22 +157,32 @@ CREATE TABLE IF NOT EXISTS user_mfa_recovery_codes (
 
 CREATE INDEX IF NOT EXISTS idx_user_mfa_recovery_user_id ON user_mfa_recovery_codes(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_mfa_recovery_code_hash ON user_mfa_recovery_codes(code_hash);
+-- v1.1: prevent duplicate unused recovery codes
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_mfa_recovery_code_hash_uniq
+  ON user_mfa_recovery_codes(code_hash)
+  WHERE used_at IS NULL;
 
 -- EMAIL ACTION TOKENS (verify email / reset password)
 CREATE TABLE IF NOT EXISTS email_action_tokens (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  action_type TEXT NOT NULL, -- verify_email | reset_password
+  action_type TEXT NOT NULL,
   token_hash TEXT NOT NULL UNIQUE,
   expires_at TIMESTAMPTZ NOT NULL,
   used_at TIMESTAMPTZ NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
 CREATE INDEX IF NOT EXISTS idx_email_action_tokens_user_id ON email_action_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_email_action_tokens_action ON email_action_tokens(action_type);
 CREATE INDEX IF NOT EXISTS idx_email_action_tokens_expires ON email_action_tokens(expires_at);
+-- v1.1: composite index for consume query pattern
+CREATE INDEX IF NOT EXISTS idx_email_action_tokens_user_action
+  ON email_action_tokens(user_id, action_type);
 
 -- AUDIT LOGS
+-- v1.1 NOTE: For production at scale, partition by month using migration 0011_audit_partition.up.sql
+-- or configure pg_partman. The flat table below is suitable for new installs or small deployments.
 CREATE TABLE IF NOT EXISTS audit_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NULL REFERENCES users(id) ON DELETE SET NULL,
@@ -155,3 +213,16 @@ FROM roles r
 JOIN permissions p ON true
 WHERE r.name = 'admin'
 ON CONFLICT DO NOTHING;
+
+-- v1.1: safety net — prevent hard deletes on users
+CREATE OR REPLACE FUNCTION prevent_user_hard_delete()
+RETURNS TRIGGER AS $$
+BEGIN
+  RAISE EXCEPTION 'Hard delete of users is not allowed. Use soft delete (set deleted_at) instead.';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_prevent_user_hard_delete
+  BEFORE DELETE ON users
+  FOR EACH ROW
+  EXECUTE FUNCTION prevent_user_hard_delete();

@@ -134,7 +134,9 @@ func (s *EmailService) ForgotPassword(ctx context.Context, email string) error {
 	}
 	u, err := s.users.GetByEmail(ctx, email)
 	if err != nil {
-		// do not leak user existence
+		// Silent success prevents user enumeration via timing.
+		// Add a small consistent delay to further reduce timing leak.
+		time.Sleep(50 * time.Millisecond)
 		return nil
 	}
 	rawValue := ""

@@ -1,0 +1,4 @@
+CREATE EXTENSION IF NOT EXISTS citext;
+
+ALTER TABLE users
+  ALTER COLUMN email TYPE CITEXT USING email::citext;

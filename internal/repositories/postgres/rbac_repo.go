@@ -45,8 +45,15 @@ func (r *RBACRepo) AssignPermissionsToRole(ctx context.Context, roleID uuid.UUID
 	}
 	br := r.db.SendBatch(ctx, batch)
 	defer br.Close()
-	_, err := br.Exec()
-	return err
+	for range permissionIDs {
+		if _, err := br.Exec(); err != nil {
+			return err
+		}
+	}
+	if err := br.Close(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *RBACRepo) AssignRolesToUser(ctx context.Context, userID uuid.UUID, roleIDs []uuid.UUID) error {
@@ -87,6 +94,26 @@ func (r *RBACRepo) ListUserPermissions(ctx context.Context, userID uuid.UUID) ([
 		out = append(out, name)
 	}
 	return out, rows.Err()
+}
+
+func (r *RBACRepo) ListUserIDsByRole(ctx context.Context, roleID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT user_id FROM user_roles WHERE role_id = $1
+	`, roleID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 func (r *RBACRepo) ListUserRoles(ctx context.Context, userID uuid.UUID) ([]string, error) {

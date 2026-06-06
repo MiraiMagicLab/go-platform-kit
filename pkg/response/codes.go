@@ -18,6 +18,7 @@ const (
 	CodeAuthPasswordResetFailed = "auth.action.password_reset_fail"
 	CodeAuthEmailNotVerified    = "auth.email.not_verified"
 	CodeAuthUserBanned          = "auth.user.banned"
+	CodeAuthAccountLocked       = "auth.user.locked"
 	CodeSessionNotFound         = "auth.session.not_found"
 	CodeAuthSessionUnsupported  = "auth.session.no_sid_in_token"
 
@@ -58,6 +59,7 @@ var defaultMessages = map[string]string{
 	CodeAuthPasswordResetFailed: "Could not reset password",
 	CodeAuthEmailNotVerified:    "Email address is not verified",
 	CodeAuthUserBanned:          "User is temporarily banned",
+	CodeAuthAccountLocked:       "Account is temporarily locked due to too many failed login attempts",
 	CodeSessionNotFound:         "Session not found or already revoked",
 	CodeAuthSessionUnsupported:  "Operation requires a session-scoped access token",
 

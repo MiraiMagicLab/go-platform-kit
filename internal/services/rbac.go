@@ -32,8 +32,18 @@ func (s *RBACService) CreatePermission(ctx context.Context, name string) (uuid.U
 }
 
 func (s *RBACService) AssignPermissionsToRole(ctx context.Context, roleID uuid.UUID, permissionIDs []uuid.UUID) error {
-	// NOTE: If you want stronger cache invalidation, you can delete keys for all users in role.
-	return s.repo.AssignPermissionsToRole(ctx, roleID, permissionIDs)
+	if err := s.repo.AssignPermissionsToRole(ctx, roleID, permissionIDs); err != nil {
+		return err
+	}
+	// Invalidate cache for all users who have this role.
+	userIDs, err := s.repo.ListUserIDsByRole(ctx, roleID)
+	if err != nil {
+		return err
+	}
+	for _, uid := range userIDs {
+		_ = s.cache.Del(ctx, s.userPermCacheKey(uid))
+	}
+	return nil
 }
 
 func (s *RBACService) AssignRolesToUser(ctx context.Context, userID uuid.UUID, roleIDs []uuid.UUID) error {

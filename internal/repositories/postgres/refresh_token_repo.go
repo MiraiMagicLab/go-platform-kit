@@ -17,23 +17,23 @@ func NewRefreshTokenRepo(db *pgxpool.Pool) *RefreshTokenRepo {
 	return &RefreshTokenRepo{db: db}
 }
 
-func (r *RefreshTokenRepo) Create(ctx context.Context, userID, sessionID uuid.UUID, tokenHash string, expiresAt time.Time, ip, ua string) (uuid.UUID, error) {
+func (r *RefreshTokenRepo) Create(ctx context.Context, userID, sessionID uuid.UUID, tokenHash string, expiresAt time.Time, ip, ua, deviceName string) (uuid.UUID, error) {
 	var id uuid.UUID
 	err := r.db.QueryRow(ctx, `
-		INSERT INTO refresh_tokens (user_id, session_id, token_hash, expires_at, ip_address, user_agent, last_used_at)
-		VALUES ($1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''), NOW())
+		INSERT INTO refresh_tokens (user_id, session_id, token_hash, expires_at, ip_address, user_agent, device_name, last_used_at)
+		VALUES ($1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''), NULLIF($7, ''), NOW())
 		RETURNING id
-	`, userID, sessionID, tokenHash, expiresAt, ip, ua).Scan(&id)
+	`, userID, sessionID, tokenHash, expiresAt, ip, ua, deviceName).Scan(&id)
 	return id, err
 }
 
 func (r *RefreshTokenRepo) GetByHash(ctx context.Context, tokenHash string) (RefreshTokenDTO, error) {
 	var t RefreshTokenDTO
 	err := r.db.QueryRow(ctx, `
-		SELECT id, user_id, session_id, token_hash, expires_at, revoked_at, revoked_reason, created_at, ip_address, user_agent, last_used_at
+		SELECT id, user_id, session_id, token_hash, expires_at, revoked_at, revoked_reason, created_at, ip_address, user_agent, device_name, last_used_at
 		FROM refresh_tokens
 		WHERE token_hash = $1
-	`, tokenHash).Scan(&t.ID, &t.UserID, &t.SessionID, &t.TokenHash, &t.ExpiresAt, &t.RevokedAt, &t.RevokedReason, &t.CreatedAt, &t.IPAddress, &t.UserAgent, &t.LastUsedAt)
+	`, tokenHash).Scan(&t.ID, &t.UserID, &t.SessionID, &t.TokenHash, &t.ExpiresAt, &t.RevokedAt, &t.RevokedReason, &t.CreatedAt, &t.IPAddress, &t.UserAgent, &t.DeviceName, &t.LastUsedAt)
 	return t, err
 }
 
@@ -86,7 +86,7 @@ func (r *RefreshTokenRepo) RevokeAllExceptSession(ctx context.Context, userID, k
 	return tag.RowsAffected(), nil
 }
 
-func (r *RefreshTokenRepo) Rotate(ctx context.Context, oldTokenHash, newTokenHash string, newExpiresAt time.Time, clientIP, userAgent string) (RotateResult, error) {
+func (r *RefreshTokenRepo) Rotate(ctx context.Context, oldTokenHash, newTokenHash string, newExpiresAt time.Time, clientIP, userAgent, deviceName string) (RotateResult, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return RotateResult{}, err
@@ -131,10 +131,10 @@ func (r *RefreshTokenRepo) Rotate(ctx context.Context, oldTokenHash, newTokenHas
 
 	var newID uuid.UUID
 	err = tx.QueryRow(ctx, `
-		INSERT INTO refresh_tokens (user_id, session_id, token_hash, expires_at, ip_address, user_agent, last_used_at)
-		VALUES ($1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''), NOW())
+		INSERT INTO refresh_tokens (user_id, session_id, token_hash, expires_at, ip_address, user_agent, device_name, last_used_at)
+		VALUES ($1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''), NULLIF($7, ''), NOW())
 		RETURNING id
-	`, userID, sessionID, newTokenHash, newExpiresAt, clientIP, userAgent).Scan(&newID)
+	`, userID, sessionID, newTokenHash, newExpiresAt, clientIP, userAgent, deviceName).Scan(&newID)
 	if err != nil {
 		return RotateResult{}, err
 	}
@@ -179,7 +179,8 @@ func (r *RefreshTokenRepo) ListActiveSessions(ctx context.Context, userID uuid.U
 			rt.last_used_at,
 			COALESCE(rt.ip_address, ''),
 			COALESCE(rt.user_agent, ''),
-			rt.expires_at
+			rt.expires_at,
+			COALESCE(rt.device_name, '')
 		FROM refresh_tokens rt
 		WHERE rt.user_id = $1
 		  AND rt.revoked_at IS NULL
@@ -194,7 +195,7 @@ func (r *RefreshTokenRepo) ListActiveSessions(ctx context.Context, userID uuid.U
 	var out []SessionListRow
 	for rows.Next() {
 		var s SessionListRow
-		if err := rows.Scan(&s.SessionID, &s.RefreshID, &s.CreatedAt, &s.LastUsedAt, &s.IPAddress, &s.UserAgent, &s.ExpiresAt); err != nil {
+		if err := rows.Scan(&s.SessionID, &s.RefreshID, &s.CreatedAt, &s.LastUsedAt, &s.IPAddress, &s.UserAgent, &s.ExpiresAt, &s.DeviceName); err != nil {
 			return nil, err
 		}
 		out = append(out, s)

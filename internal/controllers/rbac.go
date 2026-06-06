@@ -250,3 +250,22 @@ func (h *RBACHandler) ListUsers(c *gin.Context) {
 
 	response.Pagination(c, http.StatusOK, list, pageSize, (page-1)*pageSize, int64(total))
 }
+
+func (h *RBACHandler) DeleteUser(c *gin.Context) {
+	userID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
+		return
+	}
+	if h.admin == nil || h.admin.DeleteUser(c.Request.Context(), userID) != nil {
+		response.FailCode(c, http.StatusInternalServerError, response.CodeCommonInternal, nil)
+		if h.audit != nil {
+			h.audit.Log(c.Request.Context(), &userID, "auth.user_delete", "failed", c.ClientIP(), c.Request.UserAgent(), nil)
+		}
+		return
+	}
+	response.Success(c, http.StatusOK, "success", gin.H{"ok": true}, nil)
+	if h.audit != nil {
+		h.audit.Log(c.Request.Context(), &userID, "auth.user_delete", "success", c.ClientIP(), c.Request.UserAgent(), nil)
+	}
+}

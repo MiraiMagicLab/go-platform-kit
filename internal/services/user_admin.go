@@ -33,3 +33,9 @@ func (s *UserAdminService) UnbanUser(ctx context.Context, userID uuid.UUID) erro
 func (s *UserAdminService) ListUsers(ctx context.Context, page, pageSize int, filter postgres.ListUsersFilter) ([]postgres.UserDTO, int, error) {
 	return s.users.ListUsers(ctx, page, pageSize, filter)
 }
+
+func (s *UserAdminService) DeleteUser(ctx context.Context, userID uuid.UUID) error {
+	_ = s.users.IncrementTokenVersion(ctx, userID)
+	_ = s.refresh.RevokeAllForUser(ctx, userID)
+	return s.users.SoftDelete(ctx, userID)
+}

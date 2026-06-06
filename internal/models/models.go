@@ -7,12 +7,15 @@ import (
 )
 
 type User struct {
-	ID           uuid.UUID `json:"id"`
-	Email        string    `json:"email"`
-	PasswordHash string    `json:"-"`
-	TokenVersion int       `json:"-"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID               uuid.UUID  `json:"id"`
+	Email            string     `json:"email"`
+	PasswordHash     string     `json:"-"`
+	TokenVersion     int        `json:"-"`
+	FailedLoginCount int        `json:"-"`
+	LockedUntil      *time.Time `json:"locked_until,omitempty"`
+	DeletedAt        *time.Time `json:"deleted_at,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
 type Role struct {

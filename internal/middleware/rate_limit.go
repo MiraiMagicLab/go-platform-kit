@@ -18,18 +18,36 @@ type inMemCounter struct {
 }
 
 type InMemoryRateLimiter struct {
-	mu    sync.Mutex
-	store map[string]inMemCounter
+	mu              sync.Mutex
+	store           map[string]inMemCounter
+	lastCleanup     time.Time
+	cleanupInterval time.Duration
 }
 
 func NewInMemoryRateLimiter() *InMemoryRateLimiter {
-	return &InMemoryRateLimiter{store: map[string]inMemCounter{}}
+	return &InMemoryRateLimiter{
+		store:           map[string]inMemCounter{},
+		lastCleanup:     time.Now(),
+		cleanupInterval: 5 * time.Minute,
+	}
+}
+
+func (l *InMemoryRateLimiter) cleanupLocked(now time.Time) {
+	for key, v := range l.store {
+		if now.After(v.expires) {
+			delete(l.store, key)
+		}
+	}
+	l.lastCleanup = now
 }
 
 func (l *InMemoryRateLimiter) Allow(key string, limit int, window time.Duration) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := time.Now()
+	if now.Sub(l.lastCleanup) > l.cleanupInterval {
+		l.cleanupLocked(now)
+	}
 	v, ok := l.store[key]
 	if !ok || now.After(v.expires) {
 		l.store[key] = inMemCounter{count: 1, expires: now.Add(window)}

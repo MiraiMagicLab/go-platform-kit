@@ -37,13 +37,13 @@ func (h *SessionHandler) List(c *gin.Context) {
 	var list []gin.H
 	for _, r := range rows {
 		list = append(list, gin.H{
-			"id":           r.SessionID.String(),
+			"id":           r.ID.String(),
+			"device_name":  r.DeviceName,
 			"created_at":   r.CreatedAt,
-			"last_used_at": r.LastUsedAt,
+			"last_seen_at": r.LastSeenAt,
 			"ip_address":   r.IPAddress,
 			"user_agent":   r.UserAgent,
-			"expires_at":   r.ExpiresAt,
-			"current":      curSID != uuid.Nil && r.SessionID == curSID,
+			"current":      curSID != uuid.Nil && r.ID == curSID,
 		})
 	}
 	response.Success(c, http.StatusOK, "success", gin.H{"sessions": list}, nil)

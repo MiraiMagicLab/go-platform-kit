@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_user_mfa_recovery_code_hash_uniq;

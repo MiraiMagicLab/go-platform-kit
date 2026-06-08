@@ -4,7 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/MiraiMagicLab/go-auth-lib/internal/middleware"
+	httpmw "github.com/MiraiMagicLab/go-auth-lib/internal/http/middleware"
 )
 
 // TeamAuth is operator context from a control-plane TeamToken (after TeamTokenMiddleware).
@@ -18,7 +18,7 @@ type TeamAuth struct {
 
 // TeamAuthFromCtx returns TeamAuth set by TeamTokenMiddleware.
 func TeamAuthFromCtx(c *gin.Context) (TeamAuth, bool) {
-	m, ok := middleware.TeamAuthFromCtx(c)
+	m, ok := httpmw.TeamAuthFromCtx(c)
 	if !ok {
 		return TeamAuth{}, false
 	}
@@ -33,15 +33,15 @@ func TeamAuthFromCtx(c *gin.Context) (TeamAuth, bool) {
 
 // RequireTeamAccess enforces TeamToken app_access (read or write).
 func (m *Module) RequireTeamAccess(level string) gin.HandlerFunc {
-	return middleware.RequireTeamAccess(level)
+	return httpmw.RequireTeamAccess(level)
 }
 
 // RequireTeamCapability enforces a capability from TeamToken claims.
 func (m *Module) RequireTeamCapability(capability string) gin.HandlerFunc {
-	return middleware.RequireTeamCapability(capability)
+	return httpmw.RequireTeamCapability(capability)
 }
 
 // RequireRole enforces end-user roles from app DB (use with AuthMiddleware, not TeamToken).
 func (m *Module) RequireRole(roles ...string) gin.HandlerFunc {
-	return middleware.RequireRole(m.rbacSvc, roles...)
+	return httpmw.RequireRole(m.rbacSvc, roles...)
 }

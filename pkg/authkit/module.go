@@ -3,10 +3,10 @@ package authkit
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
-	"strings"
+	"net/smtp"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,170 +16,64 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 
-	"github.com/MiraiMagicLab/go-auth-lib/internal/controllers"
-	"github.com/MiraiMagicLab/go-auth-lib/internal/middleware"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/admin"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/audit"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/auth"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/cleanup"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/email"
+	httpHandlers "github.com/MiraiMagicLab/go-auth-lib/internal/http"
+	httpmw "github.com/MiraiMagicLab/go-auth-lib/internal/http/middleware"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/mfa"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/oauth"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/rbac"
 	"github.com/MiraiMagicLab/go-auth-lib/internal/repositories/postgres"
 	"github.com/MiraiMagicLab/go-auth-lib/internal/security"
-	"github.com/MiraiMagicLab/go-auth-lib/internal/services"
-	"github.com/MiraiMagicLab/go-auth-lib/internal/utils"
+	"github.com/MiraiMagicLab/go-auth-lib/internal/session"
+	storagePostgres "github.com/MiraiMagicLab/go-auth-lib/internal/storage/postgres"
+	"github.com/MiraiMagicLab/go-auth-lib/pkg/ports"
 	"github.com/MiraiMagicLab/go-auth-lib/pkg/token"
 )
 
-type Config struct {
-	JWTAccessSecret     string
-	JWTRefreshSecret    string
-	AccessTokenTTL      time.Duration
-	RefreshTokenTTL     time.Duration
-	PermissionsCacheTTL time.Duration
-	Issuer              string
-
-	// Optional: control-plane admin SSO verification (TeamToken / JWKS).
-	// If set, host apps can mount `Module.TeamTokenMiddleware()` on admin routes.
-	ControlPlaneJWKSURL  string
-	ControlPlaneIssuer   string
-	ControlPlaneAudience string
-
-	GoogleClientID     string
-	GoogleClientSecret string
-	GoogleRedirectURL  string
-
-	FacebookClientID     string
-	FacebookClientSecret string
-	FacebookRedirectURL  string
-
-	PublicBaseURL string
-	// FrontendBaseURL is the base URL of the frontend application.
-	// Used by the OAuth callback to redirect the browser to the frontend with tokens.
-	// Example: "https://app.tako-go.xyz" or "http://localhost:3000"
-	FrontendBaseURL string
-	// 32-byte key encoded in base64 for encrypting sensitive data (e.g. TOTP secret).
-	DataEncryptionKeyB64 string
-
-	// Dynamic RBAC bootstrap from host project.
-	SeedRoles           []string
-	SeedPermissions     []string
-	SeedRolePermissions map[string][]string // role -> []permission names
-
-	// Permission required to access RBAC admin endpoints. Default: "rbac.manage".
-	RBACAdminPermission string
-
-	// RequireEmailVerifiedBeforeLogin prevents issuing tokens until user's email is verified.
-	RequireEmailVerifiedBeforeLogin bool
-
-	RateLimitLoginPerMinute              int
-	RateLimitRefreshPerMinute            int
-	RateLimitForgotPerMinute             int
-	RateLimitPasswordResetPerMinute      int
-	RateLimitEmailVerifyConfirmPerMinute int
-	CORSAllowedOrigins                   []string
-
-	SMTPHost string
-	SMTPPort int
-	SMTPUser string
-	SMTPPass string
-	SMTPFrom string
-	// ResetPasswordDelivery configures forgot-password email type: "otp" (default) or "link".
-	ResetPasswordDelivery string
-
-	Hooks Hooks
-
-	AuthZ AuthZConfig
-
-	// v1.1: Account lock
-	MaxFailedLoginAttempts int
-	AccountLockDuration    time.Duration
-
-	// v1.1: Admin bypass
-	AdminBypassPermission bool
-
-	// v1.1: MFA disable security
-	RequirePasswordForMFADisable bool
-
-	// v1.1: OAuth cookie hardening (set true in production with HTTPS)
-	OAuthCookieSecure bool
-
-	// v1.1: Custom email validator (nil = use utils.DefaultEmailValidator)
-	EmailValidator utils.EmailValidator
-}
-
-func DefaultConfig() Config {
-	return Config{
-		AccessTokenTTL:      15 * time.Minute,
-		RefreshTokenTTL:     720 * time.Hour,
-		PermissionsCacheTTL: 30 * time.Second,
-		Issuer:              "authkit",
-		ControlPlaneIssuer:  "control-plane",
-		// ControlPlaneAudience is intentionally blank by default (must be explicit).
-		PublicBaseURL:   "http://localhost:8080",
-		SeedRoles:       []string{"admin", "user"},
-		SeedPermissions: []string{"rbac.manage"},
-		SeedRolePermissions: map[string][]string{
-			"admin": {"rbac.manage"},
-		},
-		RBACAdminPermission:                  "rbac.manage",
-		RequireEmailVerifiedBeforeLogin:      false,
-		RateLimitLoginPerMinute:              20,
-		RateLimitRefreshPerMinute:            60,
-		RateLimitForgotPerMinute:             10,
-		RateLimitPasswordResetPerMinute:      10,
-		RateLimitEmailVerifyConfirmPerMinute: 10,
-		CORSAllowedOrigins:                   []string{"*"},
-		SMTPPort:                             587,
-		ResetPasswordDelivery:                "otp",
-		AuthZ:                                AuthZConfig{Mode: AuthZRbac},
-		MaxFailedLoginAttempts:               5,
-		AccountLockDuration:                  15 * time.Minute,
-		AdminBypassPermission:                true,
-		RequirePasswordForMFADisable:         true,
-		OAuthCookieSecure:                    false,
-	}
-}
-
+// Module is the main auth module that wires all components together.
 type Module struct {
-	authH    *controllers.AuthHandler
-	sessionH *controllers.SessionHandler
-	rbacH    *controllers.RBACHandler
-	mfaH     *controllers.MFAHandler
-	oauthH   *controllers.OAuthHandler
-
+	authH         *httpHandlers.AuthHandler
+	sessionH      *httpHandlers.SessionHandler
+	rbacH         *httpHandlers.RBACHandler
+	mfaH          *httpHandlers.MFAHandler
+	oauthH        *httpHandlers.OAuthHandler
 	authMW        gin.HandlerFunc
 	teamTokenMW   gin.HandlerFunc
-	rbacSvc       *services.RBACService
-	emailSvc      *services.EmailService
-	cleanup       *services.CleanupService
+	rbacSvc       *rbac.RBACService
+	emailSvc      *email.EmailService
+	cleanup       *cleanup.CleanupService
 	redis         *redis.Client
 	cfg           Config
+	memLimiter    *httpmw.InMemoryRateLimiter
 	commonMounted bool
 }
 
 // AuthMiddleware returns the JWT auth middleware for protecting host app routes.
-// Usage: `r.GET("/path", mod.AuthMiddleware(), handler)`
 func (m *Module) AuthMiddleware() gin.HandlerFunc { return m.authMW }
 
-// TeamTokenMiddleware verifies a control-plane-issued TeamToken (JWKS/RS256) and
-// sets `user_id` into Gin context so go-auth-lib's RBAC can query app DB.
-//
-// Returns nil if `cfg.ControlPlaneJWKSURL` or `cfg.ControlPlaneAudience` are not configured.
+// TeamTokenMiddleware verifies a control-plane-issued TeamToken (JWKS/RS256).
 func (m *Module) TeamTokenMiddleware() gin.HandlerFunc { return m.teamTokenMW }
 
-// RequirePermission returns a middleware that checks a dynamic RBAC permission string.
-// Usage: `r.GET("/path", mod.AuthMiddleware(), mod.RequirePermission("vocab.read"), handler)`
+// RequirePermission returns middleware that checks a dynamic RBAC permission string.
 func (m *Module) RequirePermission(permission string) gin.HandlerFunc {
-	return middleware.RequirePermission(m.rbacSvc, permission, m.cfg.AdminBypassPermission)
+	return httpmw.RequirePermission(m.rbacSvc, permission, m.cfg.AdminBypassPermission)
 }
 
-// RequirePermissionNoBypass returns a middleware that checks a permission without admin bypass.
+// RequirePermissionNoBypass returns middleware that checks a permission without admin bypass.
 func (m *Module) RequirePermissionNoBypass(permission string) gin.HandlerFunc {
-	return middleware.RequirePermission(m.rbacSvc, permission, false)
+	return httpmw.RequirePermission(m.rbacSvc, permission, false)
 }
 
-// RequireRBACAdmin returns a middleware that checks `cfg.RBACAdminPermission` (default: "rbac.manage").
+// RequireRBACAdmin returns middleware that checks cfg.RBACAdminPermission.
 func (m *Module) RequireRBACAdmin() gin.HandlerFunc {
-	return middleware.RequirePermission(m.rbacSvc, m.cfg.RBACAdminPermission, m.cfg.AdminBypassPermission)
+	return httpmw.RequirePermission(m.rbacSvc, m.cfg.RBACAdminPermission, m.cfg.AdminBypassPermission)
 }
 
 // RequestVerifyEmail programmatically requests a verification email for a user.
-// Returns an error if the email sender is not configured or the user does not exist.
 func (m *Module) RequestVerifyEmail(ctx context.Context, userID uuid.UUID) error {
 	if m.emailSvc == nil {
 		return errors.New("authkit: email service not configured")
@@ -187,7 +81,7 @@ func (m *Module) RequestVerifyEmail(ctx context.Context, userID uuid.UUID) error
 	return m.emailSvc.RequestVerifyEmail(ctx, userID)
 }
 
-// ListUserRoles returns current roles for a user (from app DB).
+// ListUserRoles returns current roles for a user.
 func (m *Module) ListUserRoles(ctx context.Context, userID uuid.UUID) ([]string, error) {
 	if m == nil || m.rbacSvc == nil {
 		return nil, errors.New("authkit: rbac service not initialized")
@@ -195,7 +89,7 @@ func (m *Module) ListUserRoles(ctx context.Context, userID uuid.UUID) ([]string,
 	return m.rbacSvc.ListUserRoles(ctx, userID)
 }
 
-// ListUserPermissions returns current permissions for a user (from app DB).
+// ListUserPermissions returns current permissions for a user.
 func (m *Module) ListUserPermissions(ctx context.Context, userID uuid.UUID) ([]string, error) {
 	if m == nil || m.rbacSvc == nil {
 		return nil, errors.New("authkit: rbac service not initialized")
@@ -203,183 +97,91 @@ func (m *Module) ListUserPermissions(ctx context.Context, userID uuid.UUID) ([]s
 	return m.rbacSvc.ListUserPermissions(ctx, userID)
 }
 
-// UserIDFromCtx exposes the authenticated user id from Gin context (set by AuthMiddleware()).
-func UserIDFromCtx(c *gin.Context) (uuid.UUID, bool) { return middleware.UserIDFromCtx(c) }
+// UserIDFromCtx exposes the authenticated user id from Gin context.
+func UserIDFromCtx(c *gin.Context) (uuid.UUID, bool) { return httpmw.UserIDFromCtx(c) }
 
-// SessionIDFromCtx exposes the login session id from the access JWT claim sid (or uuid.Nil for legacy tokens).
-func SessionIDFromCtx(c *gin.Context) uuid.UUID { return middleware.SessionIDFromCtx(c) }
+// SessionIDFromCtx exposes the login session id from the access JWT claim.
+func SessionIDFromCtx(c *gin.Context) uuid.UUID { return httpmw.SessionIDFromCtx(c) }
 
-// AccessTokenMetaFromCtx exposes access token metadata (jti, exp) from Gin context (set by AuthMiddleware()).
+// AccessTokenMetaFromCtx exposes access token metadata from Gin context.
 func AccessTokenMetaFromCtx(c *gin.Context) (string, time.Time, bool) {
-	return middleware.AccessTokenMetaFromCtx(c)
+	return httpmw.AccessTokenMetaFromCtx(c)
 }
 
-// MountOptions provides fine-grained control over which endpoints are mounted.
-type MountOptions struct {
-	Common bool
-	Auth   AuthEndpoints
-	Email  EmailEndpoints
-	MFA    MFAEndpoints
-	OAuth  bool
-	RBAC   RBACEndpoints
-}
-
-type AuthEndpoints struct {
-	Register bool
-	Login    bool
-	Login2FA bool
-	Refresh  bool
-	Logout   bool
-	Me       bool
-	// Sessions: list device sessions, revoke one, revoke all other devices (requires sid in access JWT).
-	Sessions bool
-}
-
-type EmailEndpoints struct {
-	ForgotPassword      bool
-	ResetPassword       bool
-	VerifyConfirmPublic bool
-	VerifyRequestAuthed bool
-}
-
-type MFAEndpoints struct {
-	Setup   bool
-	Enable  bool
-	Disable bool
-}
-
-type RBACEndpoints struct {
-	ManageRoles       bool
-	ManagePermissions bool
-	AssignRolePerms   bool
-	AssignUserRoles   bool
-	BanUser           bool
-	UnbanUser         bool
-	DeleteUser        bool
-	ListUsers         bool
-}
-
-func DefaultMountOptions() MountOptions {
-	return MountOptions{
-		Common: true,
-		Auth: AuthEndpoints{
-			Register: true,
-			Login:    true,
-			Login2FA: true,
-			Refresh:  true,
-			Logout:   true,
-			Me:       true,
-			Sessions: true,
-		},
-		Email: EmailEndpoints{
-			ForgotPassword:      true,
-			ResetPassword:       true,
-			VerifyConfirmPublic: true,
-			VerifyRequestAuthed: true,
-		},
-		MFA: MFAEndpoints{
-			Setup:   true,
-			Enable:  true,
-			Disable: true,
-		},
-		OAuth: true,
-		RBAC: RBACEndpoints{
-			ManageRoles:       true,
-			ManagePermissions: true,
-			AssignRolePerms:   true,
-			AssignUserRoles:   true,
-			BanUser:           true,
-			UnbanUser:         true,
-			DeleteUser:        true,
-			ListUsers:         true,
-		},
-	}
-}
-
+// New creates a new Module with the given configuration and dependencies.
 func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, error) {
 	if pg == nil {
 		return nil, errors.New("pgx pool is required")
 	}
-	if cfg.JWTAccessSecret == "" || cfg.JWTRefreshSecret == "" {
-		return nil, errors.New("JWT access/refresh secrets are required")
-	}
-	if cfg.AccessTokenTTL <= 0 || cfg.RefreshTokenTTL <= 0 {
-		return nil, errors.New("token TTL must be > 0")
-	}
-	if cfg.Issuer == "" {
-		cfg.Issuer = "authkit"
-	}
-	if cfg.RBACAdminPermission == "" {
-		cfg.RBACAdminPermission = "rbac.manage"
-	}
-	if err := cfg.AuthZ.validate(); err != nil {
+	cfg.ApplyDefaults()
+	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 	if err := seedAuthZ(context.Background(), pg, cfg); err != nil {
 		return nil, err
 	}
 
+	// Create concrete repos
 	repos := postgres.NewRepos(pg)
-	userRepo := repos.User
-	refreshRepo := repos.RefreshToken
-	sessionsRepo := repos.Sessions
-	rbacRepo := repos.RBAC
-	identityRepo := repos.Identity
-	mfaRepo := repos.MFA
-	auditRepo := repos.Audit
-	emailTokenRepo := repos.EmailToken
+
+	// Create adapters (ports interfaces)
+	userRepo := storagePostgres.NewUserAdapter(repos.User)
+	refreshRepo := storagePostgres.NewRefreshTokenAdapter(repos.RefreshToken)
+	sessionsRepo := storagePostgres.NewSessionAdapter(repos.Sessions)
+	rbacRepo := storagePostgres.NewRBACAdapter(repos.RBAC)
+	identityRepo := storagePostgres.NewIdentityAdapter(repos.Identity)
+	mfaRepo := storagePostgres.NewMFAAdapter(repos.MFA)
+	auditRepo := storagePostgres.NewAuditAdapter(repos.Audit)
+	emailTokenRepo := storagePostgres.NewEmailTokenAdapter(repos.EmailToken)
 
 	jwtm := token.NewJWTManager(cfg.JWTAccessSecret, cfg.JWTRefreshSecret, cfg.Issuer)
 
-	var permCache services.StringSliceCache = services.NoopStringSliceCache{}
-	var denylist services.AccessTokenDenylist = services.NoopAccessTokenDenylist{}
+	var permCache ports.StringSliceCache = ports.NoopStringSliceCache{}
+	var denylist ports.AccessTokenDenylist = ports.NoopAccessTokenDenylist{}
 	if redisClient != nil {
-		permCache = services.NewRedisStringSliceCache(redisClient)
-		denylist = services.NewRedisAccessTokenDenylist(redisClient)
+		permCache = newRedisStringSliceCache(redisClient)
+		denylist = newRedisAccessTokenDenylist(redisClient)
 	}
 
-	var mfaCipher *security.StringCipher
+	var mfaCipher mfa.Cipher
 	if cfg.DataEncryptionKeyB64 != "" {
 		key, err := base64.StdEncoding.DecodeString(cfg.DataEncryptionKeyB64)
 		if err != nil {
 			return nil, fmt.Errorf("invalid DataEncryptionKeyB64: %w", err)
 		}
-		mfaCipher, err = security.NewStringCipher(key)
+		c, err := security.NewStringCipher(key)
 		if err != nil {
 			return nil, err
 		}
+		mfaCipher = c
 	}
 
-	rbacSvc := services.NewRBACService(rbacRepo, permCache, cfg.PermissionsCacheTTL)
-	userAdminSvc := services.NewUserAdminService(userRepo, refreshRepo)
-	mfaSvc := services.NewMFAService(mfaRepo, cfg.Issuer, mfaCipher)
-	auditSvc := services.NewAuditService(auditRepo)
-	cleanupSvc := services.NewCleanupService(refreshRepo, mfaRepo, emailTokenRepo)
+	rbacSvc := rbac.NewRBACService(rbacRepo, permCache, cfg.PermissionsCacheTTL)
+	userAdminSvc := admin.NewUserAdminService(userRepo, refreshRepo)
+	mfaSvc := mfa.NewMFAService(mfaRepo, cfg.Issuer, mfaCipher)
+	auditSvc := audit.NewAuditService(auditRepo)
+	cleanupSvc := cleanup.NewCleanupService(refreshRepo, mfaRepo, emailTokenRepo)
 
-	var sender services.EmailSender
+	var sender ports.EmailSender
 	if cfg.SMTPHost != "" && cfg.SMTPUser != "" && cfg.SMTPPass != "" && cfg.SMTPFrom != "" {
-		sender = services.NewSMTPSender(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPFrom)
+		sender = newSMTPSender(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPFrom)
 	}
-	emailSvc := services.NewEmailService(userRepo, emailTokenRepo, refreshRepo, sender, cfg.PublicBaseURL, cfg.ResetPasswordDelivery, services.EmailHooks{
+	emailSvc := email.NewEmailService(userRepo, emailTokenRepo, refreshRepo, sender, cfg.PublicBaseURL, cfg.ResetPasswordDelivery, email.Hooks{
 		BuildVerifyEmailLink:   cfg.Hooks.BuildVerifyEmailLink,
 		BuildResetPasswordLink: cfg.Hooks.BuildResetPasswordLink,
 		RenderVerifyEmail:      cfg.Hooks.RenderVerifyEmail,
 		RenderResetPassword:    cfg.Hooks.RenderResetPassword,
 	})
-	authSvc := services.NewAuthService(
-		userRepo,
-		refreshRepo,
-		mfaRepo,
-		mfaSvc,
-		denylist,
-		jwtm,
-		cfg.AccessTokenTTL,
-		cfg.RefreshTokenTTL,
-		cfg.Issuer,
-		cfg.RequireEmailVerifiedBeforeLogin,
-		cfg.MaxFailedLoginAttempts,
-		cfg.AccountLockDuration,
-	)
+
+	authCfg := auth.Config{
+		AccessTokenTTL:         cfg.AccessTokenTTL,
+		RefreshTokenTTL:        cfg.RefreshTokenTTL,
+		Issuer:                 cfg.Issuer,
+		RequireEmailVerified:   cfg.RequireEmailVerifiedBeforeLogin,
+		MaxFailedLoginAttempts: cfg.MaxFailedLoginAttempts,
+		AccountLockDuration:    cfg.AccountLockDuration,
+	}
+	authSvc := auth.NewAuthService(userRepo, refreshRepo, mfaRepo, mfaSvc, denylist, jwtm, authCfg)
 
 	var googleCfg *oauth2.Config
 	if cfg.GoogleClientID != "" && cfg.GoogleClientSecret != "" && cfg.GoogleRedirectURL != "" {
@@ -404,38 +206,39 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 			Scopes: []string{"email"},
 		}
 	}
-	oauthSvc := services.NewOAuthService(identityRepo, userRepo, googleCfg, facebookCfg)
+	oauthSvc := oauth.NewOAuthService(identityRepo, userRepo, googleCfg, facebookCfg)
 
-	var authLC *controllers.AuthLifecycle
-	esvc := emailSvc // capture for closure
+	esvc := emailSvc
 	sessionHook := cfg.Hooks.AfterSessionIssued
-	authLC = &controllers.AuthLifecycle{
-		AfterSessionIssued: func(ctx context.Context, reason string, userID uuid.UUID, email *string, ip, ua string) {
+	authLC := &httpHandlers.Lifecycle{
+		AfterSessionIssued: func(ctx *gin.Context, reason string, userID string, emailAddr *string, ip, ua string) {
 			if sessionHook != nil {
-				sessionHook(ctx, SessionIssuedReason(reason), userID, email, ip, ua)
+				uid, _ := uuid.Parse(userID)
+				sessionHook(ctx.Request.Context(), SessionIssuedReason(reason), uid, emailAddr, ip, ua)
 			}
-			// Default: send verification email on register when no custom hook is provided.
-			// AfterSessionIssued fires for login/OAuth/MFA too — email is nil there, so this is safe.
 			if reason == "register" && sessionHook == nil && esvc != nil {
-				_ = esvc.RequestVerifyEmail(ctx, userID)
+				uid, _ := uuid.Parse(userID)
+				_ = esvc.RequestVerifyEmail(ctx.Request.Context(), uid)
 			}
 		},
 	}
 
-	authH := controllers.NewAuthHandler(authSvc, emailSvc, rbacSvc, userRepo, auditSvc, authLC, cfg.EmailValidator)
-	sessionSvc := services.NewSessionService(sessionsRepo, refreshRepo, denylist)
-	sessionH := controllers.NewSessionHandler(sessionSvc, auditSvc)
-	rbacH := controllers.NewRBACHandler(rbacSvc, userAdminSvc, auditSvc)
-	mfaH := controllers.NewMFAHandler(mfaSvc, auditSvc, userRepo)
-	oauthH := controllers.NewOAuthHandler(oauthSvc, authSvc, "/auth", cfg.FrontendBaseURL, cfg.OAuthCookieSecure, authLC)
+	var emailValidate httpHandlers.EmailValidator
+	if cfg.EmailValidator != nil {
+		emailValidate = httpHandlers.EmailValidator(cfg.EmailValidator)
+	}
+	authH := httpHandlers.NewAuthHandler(authSvc, emailSvc, rbacSvc, userRepo, auditSvc, authLC, emailValidate)
+	sessionSvc := session.NewSessionService(sessionsRepo, refreshRepo, denylist)
+	sessionH := httpHandlers.NewSessionHandler(sessionSvc, auditSvc)
+	rbacH := httpHandlers.NewRBACHandler(rbacSvc, userAdminSvc, auditSvc)
+	mfaH := httpHandlers.NewMFAHandler(mfaSvc, auditSvc, userRepo)
+	oauthH := httpHandlers.NewOAuthHandler(oauthSvc, authSvc, "/auth", cfg.FrontendBaseURL, cfg.OAuthCookieSecure, authLC)
 
-	authMW := middleware.JWTAuth(jwtm, userRepo, func(ctx *gin.Context, jti string) (bool, error) {
-		return denylist.IsDenied(ctx.Request.Context(), jti)
-	})
+	authMW := httpmw.JWTAuth(jwtm, userRepo, denylist)
 
 	var teamTokenMW gin.HandlerFunc
 	if cfg.ControlPlaneJWKSURL != "" && cfg.ControlPlaneAudience != "" {
-		v, err := middleware.NewTeamTokenVerifier(cfg.ControlPlaneJWKSURL, cfg.ControlPlaneIssuer, cfg.ControlPlaneAudience)
+		v, err := httpmw.NewTeamTokenVerifier(cfg.ControlPlaneJWKSURL, cfg.ControlPlaneIssuer, cfg.ControlPlaneAudience)
 		if err != nil {
 			return nil, err
 		}
@@ -455,196 +258,11 @@ func New(cfg Config, pg *pgxpool.Pool, redisClient *redis.Client) (*Module, erro
 		cleanup:     cleanupSvc,
 		redis:       redisClient,
 		cfg:         cfg,
+		memLimiter:  httpmw.NewInMemoryRateLimiter(),
 	}, nil
 }
 
-// MountCommon attaches common middlewares (request-id, access log, CORS).
-// Call this once on the router group you will mount authkit routes into.
-func (m *Module) MountCommon(r gin.IRouter) {
-	if m.commonMounted {
-		return
-	}
-	r.Use(middleware.RequestID())
-	r.Use(middleware.AccessLog())
-	r.Use(simpleCORS(m.cfg.CORSAllowedOrigins))
-	m.commonMounted = true
-}
-
-func (m *Module) MountAuth(r gin.IRouter) {
-	memLimiter := middleware.NewInMemoryRateLimiter()
-	loginLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:login", m.cfg.RateLimitLoginPerMinute, time.Minute)
-	refreshLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:refresh", m.cfg.RateLimitRefreshPerMinute, time.Minute)
-	r.POST("/register", m.authH.Register)
-	r.POST("/login", loginLimit, m.authH.Login)
-	r.POST("/login/2fa", m.authH.CompleteMFA)
-	r.POST("/refresh", refreshLimit, m.authH.Refresh)
-
-	me := r.Group("/")
-	me.Use(m.authMW)
-	me.POST("/logout", m.authH.Logout)
-	me.GET("/me", m.authH.Me)
-	if m.sessionH != nil {
-		me.GET("/sessions", m.sessionH.List)
-		me.DELETE("/sessions/:id", m.sessionH.RevokeOne)
-		me.POST("/sessions/revoke-others", m.sessionH.RevokeOthers)
-	}
-}
-
-func (m *Module) MountEmail(r gin.IRouter) {
-	memLimiter := middleware.NewInMemoryRateLimiter()
-	forgotLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:forgot", m.cfg.RateLimitForgotPerMinute, time.Minute)
-	resetLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:reset_password", m.cfg.RateLimitPasswordResetPerMinute, time.Minute)
-	verifyConfirmLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:email_verify_confirm", m.cfg.RateLimitEmailVerifyConfirmPerMinute, time.Minute)
-	r.POST("/password/forgot", forgotLimit, m.authH.ForgotPassword)
-	r.POST("/password/reset", resetLimit, m.authH.ResetPassword)
-	r.POST("/email/verify/confirm", verifyConfirmLimit, m.authH.ConfirmVerifyEmail)
-
-	me := r.Group("/")
-	me.Use(m.authMW)
-	me.POST("/email/verify/request", m.authH.RequestVerifyEmail)
-}
-
-func (m *Module) MountMFA(r gin.IRouter) {
-	me := r.Group("/")
-	me.Use(m.authMW)
-	me.POST("/mfa/setup", m.mfaH.Setup)
-	me.POST("/mfa/enable", m.mfaH.Enable)
-	me.POST("/mfa/disable", m.mfaH.Disable)
-}
-
-func (m *Module) MountOAuth(r gin.IRouter) {
-	r.GET("/oauth/:provider/login", m.oauthH.Login)
-	r.GET("/oauth/:provider/callback", m.oauthH.Callback)
-}
-
-func (m *Module) MountRBAC(r gin.IRouter) {
-	rbac := r.Group("/")
-	rbac.Use(m.authMW)
-	rbac.Use(middleware.RequirePermission(m.rbacSvc, m.cfg.RBACAdminPermission, m.cfg.AdminBypassPermission))
-	rbac.POST("/roles", m.rbacH.CreateRole)
-	rbac.POST("/permissions", m.rbacH.CreatePermission)
-	rbac.POST("/roles/:id/permissions", m.rbacH.AssignPermissionsToRole)
-	rbac.POST("/users/:id/roles", m.rbacH.AssignRolesToUser)
-	rbac.POST("/users/:id/ban", m.rbacH.BanUser)
-	rbac.POST("/users/:id/unban", m.rbacH.UnbanUser)
-	rbac.DELETE("/users/:id", m.rbacH.DeleteUser)
-	rbac.GET("/users", m.rbacH.ListUsers)
-}
-
-// MountAll mounts common middleware and all endpoints.
-func (m *Module) MountAll(r gin.IRouter) {
-	m.MountCommon(r)
-	m.MountAuth(r)
-	m.MountEmail(r)
-	m.MountMFA(r)
-	m.MountOAuth(r)
-	m.MountRBAC(r)
-}
-
-// MountWithOptions mounts endpoints based on provided options.
-func (m *Module) MountWithOptions(r gin.IRouter, opt MountOptions) {
-	if opt.Common {
-		m.MountCommon(r)
-	}
-
-	memLimiter := middleware.NewInMemoryRateLimiter()
-	loginLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:login", m.cfg.RateLimitLoginPerMinute, time.Minute)
-	refreshLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:refresh", m.cfg.RateLimitRefreshPerMinute, time.Minute)
-	forgotLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:forgot", m.cfg.RateLimitForgotPerMinute, time.Minute)
-	resetLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:reset_password", m.cfg.RateLimitPasswordResetPerMinute, time.Minute)
-	verifyConfirmLimit := middleware.SensitiveRateLimit(m.redis, memLimiter, "rl:email_verify_confirm", m.cfg.RateLimitEmailVerifyConfirmPerMinute, time.Minute)
-
-	// AUTH (public)
-	if opt.Auth.Register {
-		r.POST("/register", m.authH.Register)
-	}
-	if opt.Auth.Login {
-		r.POST("/login", loginLimit, m.authH.Login)
-	}
-	if opt.Auth.Login2FA {
-		r.POST("/login/2fa", m.authH.CompleteMFA)
-	}
-	if opt.Auth.Refresh {
-		r.POST("/refresh", refreshLimit, m.authH.Refresh)
-	}
-
-	// EMAIL (public)
-	if opt.Email.ForgotPassword {
-		r.POST("/password/forgot", forgotLimit, m.authH.ForgotPassword)
-	}
-	if opt.Email.ResetPassword {
-		r.POST("/password/reset", resetLimit, m.authH.ResetPassword)
-	}
-	if opt.Email.VerifyConfirmPublic {
-		r.POST("/email/verify/confirm", verifyConfirmLimit, m.authH.ConfirmVerifyEmail)
-	}
-
-	// OAUTH
-	if opt.OAuth {
-		r.GET("/oauth/:provider/login", m.oauthH.Login)
-		r.GET("/oauth/:provider/callback", m.oauthH.Callback)
-	}
-
-	// AUTHED group
-	authed := r.Group("/")
-	authed.Use(m.authMW)
-
-	if opt.Auth.Logout {
-		authed.POST("/logout", m.authH.Logout)
-	}
-	if opt.Auth.Me {
-		authed.GET("/me", m.authH.Me)
-	}
-	if opt.Auth.Sessions && m.sessionH != nil {
-		authed.GET("/sessions", m.sessionH.List)
-		authed.DELETE("/sessions/:id", m.sessionH.RevokeOne)
-		authed.POST("/sessions/revoke-others", m.sessionH.RevokeOthers)
-	}
-	if opt.MFA.Setup {
-		authed.POST("/mfa/setup", m.mfaH.Setup)
-	}
-	if opt.MFA.Enable {
-		authed.POST("/mfa/enable", m.mfaH.Enable)
-	}
-	if opt.MFA.Disable {
-		authed.POST("/mfa/disable", m.mfaH.Disable)
-	}
-	if opt.Email.VerifyRequestAuthed {
-		authed.POST("/email/verify/request", m.authH.RequestVerifyEmail)
-	}
-
-	// RBAC admin group
-	if opt.RBAC.ManageRoles || opt.RBAC.ManagePermissions || opt.RBAC.AssignRolePerms || opt.RBAC.AssignUserRoles || opt.RBAC.BanUser || opt.RBAC.UnbanUser || opt.RBAC.DeleteUser {
-		rbac := r.Group("/")
-		rbac.Use(m.authMW)
-		rbac.Use(middleware.RequirePermission(m.rbacSvc, m.cfg.RBACAdminPermission, m.cfg.AdminBypassPermission))
-		if opt.RBAC.ManageRoles {
-			rbac.POST("/roles", m.rbacH.CreateRole)
-		}
-		if opt.RBAC.ManagePermissions {
-			rbac.POST("/permissions", m.rbacH.CreatePermission)
-		}
-		if opt.RBAC.AssignRolePerms {
-			rbac.POST("/roles/:id/permissions", m.rbacH.AssignPermissionsToRole)
-		}
-		if opt.RBAC.AssignUserRoles {
-			rbac.POST("/users/:id/roles", m.rbacH.AssignRolesToUser)
-		}
-		if opt.RBAC.BanUser {
-			rbac.POST("/users/:id/ban", m.rbacH.BanUser)
-		}
-		if opt.RBAC.UnbanUser {
-			rbac.POST("/users/:id/unban", m.rbacH.UnbanUser)
-		}
-		if opt.RBAC.DeleteUser {
-			rbac.DELETE("/users/:id", m.rbacH.DeleteUser)
-		}
-		if opt.RBAC.ListUsers {
-			rbac.GET("/users", m.rbacH.ListUsers)
-		}
-	}
-}
-
+// StartBackgroundCleanup launches a goroutine to periodically purge expired tokens.
 func (m *Module) StartBackgroundCleanup(ctx context.Context, interval time.Duration) {
 	if m.cleanup == nil {
 		return
@@ -666,37 +284,7 @@ func (m *Module) StartBackgroundCleanup(ctx context.Context, interval time.Durat
 	}()
 }
 
-func simpleCORS(allowedOrigins []string) gin.HandlerFunc {
-	allowAll := len(allowedOrigins) == 0
-	allowed := map[string]struct{}{}
-	for _, o := range allowedOrigins {
-		allowed[o] = struct{}{}
-		if o == "*" {
-			allowAll = true
-		}
-	}
-	return func(c *gin.Context) {
-		origin := c.GetHeader("Origin")
-		if origin != "" && (allowAll || containsOrigin(allowed, origin)) {
-			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
-			c.Writer.Header().Set("Vary", "Origin")
-			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-			c.Writer.Header().Set("Access-Control-Allow-Headers", "Authorization,Content-Type,X-Request-Id,Accept-Language")
-			c.Writer.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
-		}
-		if strings.EqualFold(c.Request.Method, http.MethodOptions) {
-			c.AbortWithStatus(http.StatusNoContent)
-			return
-		}
-		c.Next()
-	}
-}
-
-func containsOrigin(allowed map[string]struct{}, origin string) bool {
-	_, ok := allowed[origin]
-	return ok
-}
-
+// seedAuthZ seeds roles and permissions based on config.
 func seedAuthZ(ctx context.Context, pg *pgxpool.Pool, cfg Config) error {
 	for _, role := range cfg.SeedRoles {
 		if role == "" {
@@ -738,4 +326,83 @@ func seedAuthZ(ctx context.Context, pg *pgxpool.Pool, cfg Config) error {
 		}
 	}
 	return nil
+}
+
+// Redis adapter types (minimal wrappers to avoid direct go-redis dependency in this package).
+type redisClientAdapter struct {
+	rdb *redis.Client
+}
+
+func newRedisStringSliceCache(rdb *redis.Client) ports.StringSliceCache {
+	return &redisStringSliceCacheAdapter{rdb: rdb}
+}
+
+type redisStringSliceCacheAdapter struct {
+	rdb *redis.Client
+}
+
+func (c *redisStringSliceCacheAdapter) Get(ctx context.Context, key string) ([]string, bool, error) {
+	val, err := c.rdb.Get(ctx, key).Result()
+	if err != nil {
+		return nil, false, nil
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(val), &out); err != nil {
+		return nil, false, err
+	}
+	return out, true, nil
+}
+
+func (c *redisStringSliceCacheAdapter) Set(ctx context.Context, key string, value []string, ttl time.Duration) error {
+	b, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	return c.rdb.Set(ctx, key, string(b), ttl).Err()
+}
+
+func (c *redisStringSliceCacheAdapter) Del(ctx context.Context, key string) error {
+	return c.rdb.Del(ctx, key).Err()
+}
+
+func newRedisAccessTokenDenylist(rdb *redis.Client) ports.AccessTokenDenylist {
+	return &redisDenylistAdapter{rdb: rdb}
+}
+
+type redisDenylistAdapter struct {
+	rdb *redis.Client
+}
+
+func (d *redisDenylistAdapter) IsDenied(ctx context.Context, jti string) (bool, error) {
+	_, err := d.rdb.Get(ctx, "deny:access:"+jti).Result()
+	if err != nil {
+		return false, nil
+	}
+	return true, nil
+}
+
+func (d *redisDenylistAdapter) Deny(ctx context.Context, jti string, ttl time.Duration) error {
+	return d.rdb.Set(ctx, "deny:access:"+jti, "1", ttl).Err()
+}
+
+// SMTP sender adapter.
+type smtpSenderAdapter struct {
+	host, user, pass, from string
+	port                   int
+}
+
+func newSMTPSender(host string, port int, user, pass, from string) ports.EmailSender {
+	return &smtpSenderAdapter{host: host, port: port, user: user, pass: pass, from: from}
+}
+
+func (s *smtpSenderAdapter) Send(ctx context.Context, to, subject, body string) error {
+	addr := fmt.Sprintf("%s:%d", s.host, s.port)
+	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\n\r\n%s", s.from, to, subject, body)
+	return sendMail(addr, s.user, s.pass, s.from, []string{to}, []byte(msg))
+}
+
+// sendMail is a wrapper around net/smtp.SendMail.
+func sendMail(addr, username, password, from string, to []string, msg []byte) error {
+	auth := smtp.PlainAuth("", username, password, addr)
+	return smtp.SendMail(addr, auth, from, to, msg)
 }

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/MiraiMagicLab/go-auth-lib/pkg/ports"
+	"github.com/MiraiMagicLab/go-platform-kit/pkg/ports"
 )
 
 // Ensure RedisStringSliceCache implements ports.StringSliceCache at compile time.

@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/MiraiMagicLab/go-auth-lib/pkg/domain"
+	"github.com/MiraiMagicLab/go-platform-kit/pkg/domain"
 )
 
 // ListUsersFilter defines filtering options for listing users.

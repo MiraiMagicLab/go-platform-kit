@@ -7,6 +7,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// SecurityHeaders returns middleware that sets common security headers.
+func SecurityHeaders() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Writer.Header().Set("X-Content-Type-Options", "nosniff")
+		c.Writer.Header().Set("X-Frame-Options", "DENY")
+		c.Writer.Header().Set("Referrer-Policy", "no-referrer")
+		c.Next()
+	}
+}
+
 // CORS returns middleware that handles CORS headers.
 func CORS(allowedOrigins []string) gin.HandlerFunc {
 	allowAll := len(allowedOrigins) == 0

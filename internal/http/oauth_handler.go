@@ -6,11 +6,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/MiraiMagicLab/go-auth-lib/internal/auth"
-	oauthSvc "github.com/MiraiMagicLab/go-auth-lib/internal/oauth"
-	"github.com/MiraiMagicLab/go-auth-lib/internal/utils"
-	"github.com/MiraiMagicLab/go-auth-lib/pkg/domain"
-	"github.com/MiraiMagicLab/go-auth-lib/pkg/response"
+	"github.com/MiraiMagicLab/go-platform-kit/internal/auth"
+	oauthSvc "github.com/MiraiMagicLab/go-platform-kit/internal/oauth"
+	"github.com/MiraiMagicLab/go-platform-kit/internal/utils"
+	"github.com/MiraiMagicLab/go-platform-kit/pkg/domain"
+	"github.com/MiraiMagicLab/go-platform-kit/pkg/response"
 )
 
 // OAuthHandler handles OAuth endpoints.

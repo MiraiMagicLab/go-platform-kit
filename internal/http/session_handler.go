@@ -6,10 +6,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/MiraiMagicLab/go-auth-lib/internal/audit"
-	"github.com/MiraiMagicLab/go-auth-lib/internal/http/middleware"
-	"github.com/MiraiMagicLab/go-auth-lib/internal/session"
-	"github.com/MiraiMagicLab/go-auth-lib/pkg/response"
+	"github.com/MiraiMagicLab/go-platform-kit/internal/audit"
+	"github.com/MiraiMagicLab/go-platform-kit/internal/http/middleware"
+	"github.com/MiraiMagicLab/go-platform-kit/internal/session"
+	"github.com/MiraiMagicLab/go-platform-kit/pkg/response"
 )
 
 // SessionHandler handles session management endpoints.

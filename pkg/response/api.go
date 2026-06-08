@@ -3,6 +3,7 @@ package response
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -132,4 +133,135 @@ func CursorPagination(c *gin.Context, status int, records interface{}, nextCurso
 			},
 		},
 	})
+}
+
+// OK returns a 200 success response.
+func OK(c *gin.Context, data interface{}) {
+	Success(c, http.StatusOK, "success", data, nil)
+}
+
+// Created returns a 201 success response.
+func Created(c *gin.Context, data interface{}) {
+	Success(c, http.StatusCreated, "success", data, nil)
+}
+
+// StatusToErrorCode maps HTTP status into stable codeMessage strings.
+func StatusToErrorCode(status int) string {
+	switch status {
+	case http.StatusBadRequest:
+		return "common.bad_request"
+	case http.StatusUnauthorized:
+		return "auth.unauthorized"
+	case http.StatusForbidden:
+		return "auth.forbidden"
+	case http.StatusNotFound:
+		return "common.not_found"
+	case http.StatusTooManyRequests:
+		return "common.too_many_requests"
+	case http.StatusInternalServerError:
+		return "common.internal_error"
+	default:
+		if status >= 400 && status < 500 {
+			return "common.bad_request"
+		}
+		if status >= 500 {
+			return "common.internal_error"
+		}
+		return "common.unknown_error"
+	}
+}
+
+// FailStatus behaves like Fail and attaches a stable code derived from HTTP status.
+func FailStatus(c *gin.Context, status int, params map[string]interface{}) {
+	code := StatusToErrorCode(status)
+	FailCode(c, status, code, params)
+}
+
+// PaginatingQueryRecord is the pagination format: {records, current, size, total}.
+type PaginatingQueryRecord struct {
+	Records interface{} `json:"records"`
+	Current int         `json:"current"`
+	Size    int         `json:"size"`
+	Total   int         `json:"total"`
+}
+
+// PaginateQueryRecord wraps records with {records,current,size,total}.
+func PaginateQueryRecord(c *gin.Context, status int, records interface{}, current, size, total int) {
+	c.JSON(status, ApiResponse{
+		Success: true,
+		Code:    "success",
+		Data: PaginatingQueryRecord{
+			Records: records,
+			Current: current,
+			Size:    size,
+			Total:   total,
+		},
+	})
+}
+
+// ParseLimitOffset reads `limit` + `offset` from query and applies sane bounds.
+func ParseLimitOffset(c *gin.Context, defaultLimit, maxLimit int) (limit, offset int) {
+	limit = defaultLimit
+	if v := strings.TrimSpace(c.Query("limit")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	if maxLimit > 0 && limit > maxLimit {
+		limit = maxLimit
+	}
+
+	offset = 0
+	if v := strings.TrimSpace(c.Query("offset")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			offset = n
+		}
+	}
+	return limit, offset
+}
+
+// ParsePaginationParams reads either (current,size) or legacy (limit,offset).
+func ParsePaginationParams(c *gin.Context, defaultCurrent, defaultSize, maxSize int, defaultLimit, maxLimit int) (current, size, limit, offset int) {
+	curRaw := strings.TrimSpace(c.Query("current"))
+	sizeRaw := strings.TrimSpace(c.Query("size"))
+	if curRaw != "" && sizeRaw != "" {
+		cur, err1 := strconv.Atoi(curRaw)
+		sz, err2 := strconv.Atoi(sizeRaw)
+		if err1 == nil && err2 == nil && cur > 0 && sz > 0 {
+			if maxSize > 0 && sz > maxSize {
+				sz = maxSize
+			}
+			current = cur
+			size = sz
+			limit = sz
+			offset = (current - 1) * size
+			return
+		}
+	}
+
+	limit, offset = ParseLimitOffset(c, defaultLimit, maxLimit)
+	if limit <= 0 {
+		limit = defaultLimit
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	size = limit
+	current = offset/limit + 1
+	return
+}
+
+// ParseCursor reads `cursor` and `limit` from query params.
+func ParseCursor(c *gin.Context, defaultLimit, maxLimit int) (cursor string, limit int) {
+	cursor = strings.TrimSpace(c.Query("cursor"))
+	limit = defaultLimit
+	if v := strings.TrimSpace(c.Query("limit")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	if maxLimit > 0 && limit > maxLimit {
+		limit = maxLimit
+	}
+	return cursor, limit
 }

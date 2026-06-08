@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/MiraiMagicLab/go-auth-lib/internal/auth"
-	"github.com/MiraiMagicLab/go-auth-lib/internal/mocks"
-	"github.com/MiraiMagicLab/go-auth-lib/pkg/domain"
-	"github.com/MiraiMagicLab/go-auth-lib/pkg/token"
+	"github.com/MiraiMagicLab/go-platform-kit/internal/auth"
+	"github.com/MiraiMagicLab/go-platform-kit/internal/mocks"
+	"github.com/MiraiMagicLab/go-platform-kit/pkg/domain"
+	"github.com/MiraiMagicLab/go-platform-kit/pkg/token"
 )
 
 const (

@@ -14,7 +14,7 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/MiraiMagicLab/go-auth-lib/pkg/ports"
+	"github.com/MiraiMagicLab/go-platform-kit/pkg/ports"
 )
 
 const (

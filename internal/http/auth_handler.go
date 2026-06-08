@@ -6,14 +6,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/MiraiMagicLab/go-auth-lib/internal/audit"
-	"github.com/MiraiMagicLab/go-auth-lib/internal/auth"
-	"github.com/MiraiMagicLab/go-auth-lib/internal/email"
-	"github.com/MiraiMagicLab/go-auth-lib/internal/http/middleware"
-	"github.com/MiraiMagicLab/go-auth-lib/internal/rbac"
-	"github.com/MiraiMagicLab/go-auth-lib/pkg/domain"
-	"github.com/MiraiMagicLab/go-auth-lib/pkg/ports"
-	"github.com/MiraiMagicLab/go-auth-lib/pkg/response"
+	"github.com/MiraiMagicLab/go-platform-kit/internal/audit"
+	"github.com/MiraiMagicLab/go-platform-kit/internal/auth"
+	"github.com/MiraiMagicLab/go-platform-kit/internal/email"
+	"github.com/MiraiMagicLab/go-platform-kit/internal/http/middleware"
+	"github.com/MiraiMagicLab/go-platform-kit/internal/rbac"
+	"github.com/MiraiMagicLab/go-platform-kit/pkg/domain"
+	"github.com/MiraiMagicLab/go-platform-kit/pkg/ports"
+	"github.com/MiraiMagicLab/go-platform-kit/pkg/response"
 )
 
 // Lifecycle holds callbacks that fire after session issuance.

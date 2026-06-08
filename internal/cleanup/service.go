@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/MiraiMagicLab/go-auth-lib/pkg/ports"
+	"github.com/MiraiMagicLab/go-platform-kit/pkg/ports"
 )
 
 // CleanupService periodically purges expired/revoked data.

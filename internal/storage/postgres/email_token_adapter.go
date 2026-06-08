@@ -6,8 +6,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/MiraiMagicLab/go-auth-lib/internal/repositories/postgres"
-	"github.com/MiraiMagicLab/go-auth-lib/pkg/ports"
+	"github.com/MiraiMagicLab/go-platform-kit/internal/repositories/postgres"
+	"github.com/MiraiMagicLab/go-platform-kit/pkg/ports"
 )
 
 var _ ports.EmailTokenRepository = (*EmailTokenAdapter)(nil)

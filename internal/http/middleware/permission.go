@@ -5,8 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/MiraiMagicLab/go-auth-lib/internal/rbac"
-	"github.com/MiraiMagicLab/go-auth-lib/pkg/response"
+	"github.com/MiraiMagicLab/go-platform-kit/internal/rbac"
+	"github.com/MiraiMagicLab/go-platform-kit/pkg/response"
 )
 
 // RequirePermission returns middleware that checks if the user has the named permission.

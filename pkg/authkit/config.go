@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/MiraiMagicLab/go-auth-lib/internal/utils"
+	"github.com/MiraiMagicLab/go-platform-kit/internal/utils"
 )
 
 // Config holds all configuration for the auth module.

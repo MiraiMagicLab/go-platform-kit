@@ -14,7 +14,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/oauth2"
 
-	"github.com/MiraiMagicLab/go-auth-lib/pkg/ports"
+	"github.com/MiraiMagicLab/go-platform-kit/pkg/ports"
 )
 
 var ErrOAuthNotConfigured = errors.New("oauth not configured")

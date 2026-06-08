@@ -1,13 +1,56 @@
-## Embedded Auth Library (Go + Gin + Postgres)
+## Go Platform Kit (Go + Gin + Postgres + Redis)
 
-Production-ready starter for an **authentication + authorization** service:
+Production-ready platform toolkit for Go backend services:
 
 - **Auth**: register/login/refresh/logout, bcrypt hashing
 - **Tokens**: short-lived access JWT + long-lived refresh token (atomic rotation, replay detection, revoke)
 - **Authorization**: **dynamic RBAC** (permissions stored in DB as strings, not hardcoded)
 - **MFA**: TOTP + recovery codes
 - **Social login**: Google and Facebook OAuth2
-- **Architecture**: clean-ish layers (handler → service → repository)
+- **Architecture**: modular with clean architecture (ports/adapters pattern)
+
+### Architecture (v2.0)
+
+```
+pkg/                    # Public API surface
+  authkit/              # Module orchestrator (New, Mount*, middleware exports)
+  adminschema/          # Admin panel schema management (compiler, migration)
+  domain/               # Domain types with behavior (User, Session, Token, etc.)
+  ports/                # Repository/service interfaces (for custom implementations)
+  token/                # JWT manager
+  response/             # Response envelope + pagination helpers
+
+internal/               # Implementation details
+  auth/                 # Auth use case (register, login, refresh, logout)
+  session/              # Session management
+  mfa/                  # TOTP MFA
+  oauth/                # OAuth2 flows
+  rbac/                 # Role/permission management
+  email/                # Email verification & password reset
+  admin/                # User admin operations
+  audit/                # Audit logging
+  cleanup/              # Background cleanup
+  http/                 # HTTP handlers (thin adapters)
+  http/middleware/       # Auth, RBAC, CORS, rate-limit, security headers
+  storage/postgres/     # Repository implementations
+  mocks/                # Test mocks for all interfaces
+  repositories/         # Concrete PostgreSQL repositories
+
+cmd/
+  migrate/              # PostgreSQL migration CLI tool
+```
+
+Key design decisions:
+- **Interface-driven**: All services depend on `pkg/ports/` interfaces, not concrete types
+- **Testable**: Full unit test coverage with mocks (no database required)
+- **Domain types have behavior**: `User.IsLocked()`, `RefreshToken.IsActive()`, etc.
+- **Single JWT library**: Only `golang-jwt/jwt/v5` (consolidated from v4+v5)
+- **Shared rate limiter**: One instance across all mount points
+- **Structured logging**: `log/slog` for all handlers and services
+- **Admin schema management**: Compiler for admin panel configuration
+- **Migration CLI**: Built-in database migration tool
+- **Security headers**: X-Content-Type-Options, X-Frame-Options, Referrer-Policy
+- **Enhanced pagination**: Limit/offset, current/size, cursor-based formats
 
 ### Quick start (embedded)
 
@@ -117,7 +160,7 @@ cfg.Hooks.BuildResetPasswordLink = func(publicBaseURL, token string) string {
 
 This library is hosted as a **private** GitHub repo:
 
-- https://github.com/MiraiMagicLab/go-auth-lib
+- https://github.com/MiraiMagicLab/go-platform-kit
 
 To import it from another Go project, configure:
 
@@ -132,7 +175,7 @@ go env -w GOPRIVATE=github.com/MiraiMagicLab/*
 3) Add dependency (pin to a tag)
 
 ```bash
-go get github.com/MiraiMagicLab/go-auth-lib@v1.0.0
+go get github.com/MiraiMagicLab/go-platform-kit@v1.0.0
 ```
 
 If you don’t have a tag yet, create and push one in this repo:
@@ -261,6 +304,115 @@ All non-redirect API endpoints return a standard envelope:
 - Frontend/mobile can map `code` to localized text by user locale.
 
 This project now focuses on embedded library mode only (no standalone microservice SDK client).
+
+### Testing
+
+**Unit tests** (no database required):
+
+```bash
+go test ./... -count=1
+```
+
+**Integration tests** (requires PostgreSQL):
+
+```bash
+export DATABASE_URL="postgres://user:pass@localhost:5432/authsvc?sslmode=disable"
+go test -tags=integration ./integration/... -v
+```
+
+**Run with coverage**:
+
+```bash
+go test ./... -coverprofile=coverage.out -covermode=atomic
+go tool cover -html=coverage.out -o coverage.html
+```
+
+### Custom Implementations
+
+The library uses interfaces defined in `pkg/ports/` for all dependencies. You can provide custom implementations:
+
+```go
+// Custom user repository (e.g., for testing or different database)
+type MyUserRepo struct{}
+
+func (r *MyUserRepo) Create(ctx context.Context, email, passwordHash string) (uuid.UUID, error) {
+    // Your implementation
+}
+
+// Use custom implementation
+mod, _ := authkit.NewWithCustomRepos(cfg, myUserRepo, myRefreshRepo, ...)
+```
+
+Available interfaces in `pkg/ports/`:
+- `UserRepository` - User CRUD operations
+- `RefreshTokenRepository` - Refresh token management
+- `SessionRepository` - Session management
+- `RBACRepository` - Role/permission management
+- `MFARepository` - MFA configuration
+- `IdentityRepository` - OAuth identity linking
+- `AuditRepository` - Audit logging
+- `EmailTokenRepository` - Email action tokens
+- `StringSliceCache` - Permission caching
+- `AccessTokenDenylist` - Token denylist
+- `EmailSender` - Email sending
+
+### Admin Schema Management
+
+The `pkg/adminschema` package provides tools for managing admin panel configurations:
+
+```go
+import "github.com/MiraiMagicLab/go-platform-kit/pkg/adminschema"
+
+// Build admin shell from contract JSON
+shell := adminschema.BuildShellFromContract(contractJSON)
+if shell.Enabled {
+    for _, section := range shell.Sections {
+        fmt.Printf("Section: %s - %s\n", section.ID, section.Title)
+    }
+}
+
+// Migrate legacy permissions to capabilities
+result, changed, err := adminschema.MigrateSchemaContentV3(rawJSON)
+```
+
+### Migration CLI
+
+The `cmd/migrate` tool applies SQL migrations:
+
+```bash
+export DATABASE_URL="postgres://user:pass@localhost:5432/dbname?sslmode=disable"
+export MIGRATIONS_DIR="migrations"
+go run ./cmd/migrate
+```
+
+### Response Helpers
+
+Enhanced response utilities:
+
+```go
+import "github.com/MiraiMagicLab/go-platform-kit/pkg/response"
+
+// Quick responses
+response.OK(c, data)
+response.Created(c, data)
+
+// Pagination (limit/offset)
+response.Pagination(c, 200, items, limit, offset, total)
+
+// Pagination (current/size for admin frontend)
+response.PaginateQueryRecord(c, 200, records, current, size, total)
+
+// Pagination (cursor-based)
+response.CursorPagination(c, 200, records, nextCursor, hasMore)
+
+// Auto-derive error code from HTTP status
+response.FailStatus(c, http.StatusBadRequest, params)
+
+// Parse pagination params
+limit, offset := response.ParseLimitOffset(c, 20, 100)
+current, size, limit, offset := response.ParsePaginationParams(c, 1, 20, 100, 20, 100)
+cursor, limit := response.ParseCursor(c, 20, 100)
+```
 
 ### Example project
 

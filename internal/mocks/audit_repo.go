@@ -3,8 +3,8 @@ package mocks
 import (
 	"context"
 
-	"github.com/MiraiMagicLab/go-platform-kit/pkg/domain"
-	"github.com/MiraiMagicLab/go-platform-kit/pkg/ports"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/pkg/domain"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/pkg/ports"
 )
 
 var _ ports.AuditRepository = (*AuditRepoMock)(nil)

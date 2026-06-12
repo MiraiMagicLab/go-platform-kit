@@ -7,9 +7,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/MiraiMagicLab/go-platform-kit/internal/audit"
-	"github.com/MiraiMagicLab/go-platform-kit/internal/mocks"
-	"github.com/MiraiMagicLab/go-platform-kit/pkg/domain"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/internal/audit"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/internal/mocks"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/pkg/domain"
 )
 
 func TestAuditService_Log(t *testing.T) {

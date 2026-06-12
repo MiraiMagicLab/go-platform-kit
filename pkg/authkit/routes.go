@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	httpmw "github.com/MiraiMagicLab/go-platform-kit/internal/http/middleware"
+	httpmw "github.com/MiraiMagicLab/go-platform-kit/v2/internal/http/middleware"
 )
 
 // MountOptions provides fine-grained control over which endpoints are mounted.

@@ -13,8 +13,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/pquerna/otp/totp"
 
-	"github.com/MiraiMagicLab/go-platform-kit/pkg/domain"
-	"github.com/MiraiMagicLab/go-platform-kit/pkg/ports"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/pkg/domain"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/pkg/ports"
 )
 
 // Cipher defines encryption/decryption for TOTP secrets at rest.

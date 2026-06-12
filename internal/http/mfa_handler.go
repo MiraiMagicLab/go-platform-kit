@@ -5,11 +5,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/MiraiMagicLab/go-platform-kit/internal/audit"
-	"github.com/MiraiMagicLab/go-platform-kit/internal/http/middleware"
-	"github.com/MiraiMagicLab/go-platform-kit/internal/mfa"
-	"github.com/MiraiMagicLab/go-platform-kit/pkg/ports"
-	"github.com/MiraiMagicLab/go-platform-kit/pkg/response"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/internal/audit"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/internal/http/middleware"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/internal/mfa"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/pkg/ports"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/pkg/response"
 )
 
 // MFAHandler handles MFA endpoints.

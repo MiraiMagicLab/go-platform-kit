@@ -4,7 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	httpmw "github.com/MiraiMagicLab/go-platform-kit/internal/http/middleware"
+	httpmw "github.com/MiraiMagicLab/go-platform-kit/v2/internal/http/middleware"
 )
 
 // TeamAuth is operator context from a control-plane TeamToken (after TeamTokenMiddleware).

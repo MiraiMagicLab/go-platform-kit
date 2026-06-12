@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/MiraiMagicLab/go-platform-kit/internal/mocks"
-	"github.com/MiraiMagicLab/go-platform-kit/internal/session"
-	"github.com/MiraiMagicLab/go-platform-kit/pkg/domain"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/internal/mocks"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/internal/session"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/pkg/domain"
 )
 
 func TestSessionService_List(t *testing.T) {

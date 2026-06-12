@@ -7,8 +7,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/MiraiMagicLab/go-platform-kit/pkg/domain"
-	"github.com/MiraiMagicLab/go-platform-kit/pkg/ports"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/pkg/domain"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/pkg/ports"
 )
 
 // ErrSessionNotFound is returned when no active session exists for the given session id.

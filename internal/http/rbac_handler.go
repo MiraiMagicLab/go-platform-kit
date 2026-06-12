@@ -9,11 +9,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/MiraiMagicLab/go-platform-kit/internal/admin"
-	"github.com/MiraiMagicLab/go-platform-kit/internal/audit"
-	"github.com/MiraiMagicLab/go-platform-kit/internal/rbac"
-	"github.com/MiraiMagicLab/go-platform-kit/pkg/ports"
-	"github.com/MiraiMagicLab/go-platform-kit/pkg/response"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/internal/admin"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/internal/audit"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/internal/rbac"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/pkg/ports"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/pkg/response"
 )
 
 // RBACHandler handles RBAC admin endpoints.

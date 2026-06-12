@@ -14,14 +14,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/MiraiMagicLab/go-platform-kit/internal/auth"
-	"github.com/MiraiMagicLab/go-platform-kit/internal/mfa"
-	"github.com/MiraiMagicLab/go-platform-kit/internal/rbac"
-	"github.com/MiraiMagicLab/go-platform-kit/internal/session"
-	"github.com/MiraiMagicLab/go-platform-kit/internal/storage/postgres"
-	"github.com/MiraiMagicLab/go-platform-kit/pkg/domain"
-	"github.com/MiraiMagicLab/go-platform-kit/pkg/ports"
-	"github.com/MiraiMagicLab/go-platform-kit/pkg/token"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/internal/auth"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/internal/mfa"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/internal/rbac"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/internal/session"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/internal/storage/postgres"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/pkg/domain"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/pkg/ports"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/pkg/token"
 )
 
 var testPool *pgxpool.Pool

@@ -10,9 +10,9 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/MiraiMagicLab/go-platform-kit/pkg/domain"
-	"github.com/MiraiMagicLab/go-platform-kit/pkg/ports"
-	"github.com/MiraiMagicLab/go-platform-kit/pkg/token"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/pkg/domain"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/pkg/ports"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/pkg/token"
 )
 
 // MFAVerifier verifies TOTP codes or recovery codes.

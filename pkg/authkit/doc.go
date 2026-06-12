@@ -4,9 +4,9 @@
 //
 // Đường dẫn public — consumer được phép import, giữ tương thích semver:
 //
-//	github.com/MiraiMagicLab/go-platform-kit/pkg/authkit   — New, Mount*, middleware
-//	github.com/MiraiMagicLab/go-platform-kit/pkg/response  — envelope JSON Success / Fail / FailCode (dùng chung với host app)
-//	github.com/MiraiMagicLab/go-platform-kit/pkg/token     — JWT (khi host cần tách lẻ)
+//	github.com/MiraiMagicLab/go-platform-kit/v2/pkg/authkit   — New, Mount*, middleware
+//	github.com/MiraiMagicLab/go-platform-kit/v2/pkg/response  — envelope JSON Success / Fail / FailCode (dùng chung với host app)
+//	github.com/MiraiMagicLab/go-platform-kit/v2/pkg/token     — JWT (khi host cần tách lẻ)
 //
 // internal/ — implementation, không import từ repo ngoài module:
 //

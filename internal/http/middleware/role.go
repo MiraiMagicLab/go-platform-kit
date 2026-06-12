@@ -5,8 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/MiraiMagicLab/go-platform-kit/internal/rbac"
-	"github.com/MiraiMagicLab/go-platform-kit/pkg/response"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/internal/rbac"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/pkg/response"
 )
 
 // RequireRole returns middleware that checks if the user has at least one of the allowed roles.

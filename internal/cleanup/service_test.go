@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/MiraiMagicLab/go-platform-kit/internal/cleanup"
-	"github.com/MiraiMagicLab/go-platform-kit/internal/mocks"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/internal/cleanup"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/internal/mocks"
 )
 
 func TestCleanupService_RunOnce(t *testing.T) {

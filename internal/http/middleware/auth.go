@@ -8,9 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/MiraiMagicLab/go-platform-kit/pkg/ports"
-	"github.com/MiraiMagicLab/go-platform-kit/pkg/response"
-	"github.com/MiraiMagicLab/go-platform-kit/pkg/token"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/pkg/ports"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/pkg/response"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/pkg/token"
 )
 
 const (

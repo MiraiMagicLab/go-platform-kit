@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MiraiMagicLab/go-platform-kit/pkg/ports"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/pkg/ports"
 )
 
 var _ ports.AccessTokenDenylist = (*DenylistMock)(nil)

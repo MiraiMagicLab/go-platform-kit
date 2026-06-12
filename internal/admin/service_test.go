@@ -9,10 +9,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/MiraiMagicLab/go-platform-kit/internal/admin"
-	"github.com/MiraiMagicLab/go-platform-kit/internal/mocks"
-	"github.com/MiraiMagicLab/go-platform-kit/pkg/domain"
-	"github.com/MiraiMagicLab/go-platform-kit/pkg/ports"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/internal/admin"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/internal/mocks"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/pkg/domain"
+	"github.com/MiraiMagicLab/go-platform-kit/v2/pkg/ports"
 )
 
 func TestUserAdminService_BanUser(t *testing.T) {

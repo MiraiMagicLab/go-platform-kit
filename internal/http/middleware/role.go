@@ -14,14 +14,14 @@ func RequireRole(rbacSvc *rbac.RBACService, allowed ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID, ok := UserIDFromCtx(c)
 		if !ok {
-			response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
+			response.FailCode(c, http.StatusUnauthorized, response.CodeUnauthorized, nil)
 			c.Abort()
 			return
 		}
 
 		roles, err := rbacSvc.ListUserRoles(c.Request.Context(), userID)
 		if err != nil {
-			response.FailCode(c, http.StatusInternalServerError, response.CodeCommonInternal, nil)
+			response.FailCode(c, http.StatusInternalServerError, response.CodeInternal, nil)
 			c.Abort()
 			return
 		}
@@ -37,7 +37,7 @@ func RequireRole(rbacSvc *rbac.RBACService, allowed ...string) gin.HandlerFunc {
 			}
 		}
 
-		response.FailCode(c, http.StatusForbidden, response.CodeAuthForbidden, nil)
+		response.FailCode(c, http.StatusForbidden, response.CodeForbidden, nil)
 		c.Abort()
 	}
 }

@@ -71,7 +71,7 @@ func (v *TeamTokenVerifier) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authz := c.GetHeader("Authorization")
 		if !strings.HasPrefix(strings.ToLower(authz), "bearer ") {
-			response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
+			response.Fail(c, http.StatusUnauthorized, response.CodeUnauthorized, nil)
 			c.Abort()
 			return
 		}
@@ -83,38 +83,38 @@ func (v *TeamTokenVerifier) Middleware() gin.HandlerFunc {
 			jwt.WithAudience(v.aud),
 		)
 		if err != nil || tok == nil || !tok.Valid {
-			response.Fail(c, http.StatusUnauthorized, response.CodeAuthInvalidToken, nil)
+			response.Fail(c, http.StatusUnauthorized, response.CodeAuthTokenInvalid, nil)
 			c.Abort()
 			return
 		}
 
 		subjectUUID, err := uuid.Parse(claims.Subject)
 		if err != nil {
-			response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
+			response.Fail(c, http.StatusUnauthorized, response.CodeUnauthorized, nil)
 			c.Abort()
 			return
 		}
 
 		if claims.AppAccess != "read" && claims.AppAccess != "write" {
-			response.Fail(c, http.StatusUnauthorized, response.CodeAuthInvalidToken, nil)
+			response.Fail(c, http.StatusUnauthorized, response.CodeAuthTokenInvalid, nil)
 			c.Abort()
 			return
 		}
 		if len(claims.Capabilities) == 0 {
-			response.Fail(c, http.StatusUnauthorized, response.CodeAuthInvalidToken, nil)
+			response.Fail(c, http.StatusUnauthorized, response.CodeAuthTokenInvalid, nil)
 			c.Abort()
 			return
 		}
 
 		wsID, err := uuid.Parse(claims.WorkspaceID)
 		if err != nil {
-			response.Fail(c, http.StatusUnauthorized, response.CodeAuthInvalidToken, nil)
+			response.Fail(c, http.StatusUnauthorized, response.CodeAuthTokenInvalid, nil)
 			c.Abort()
 			return
 		}
 		appID, err := uuid.Parse(claims.AppID)
 		if err != nil {
-			response.Fail(c, http.StatusUnauthorized, response.CodeAuthInvalidToken, nil)
+			response.Fail(c, http.StatusUnauthorized, response.CodeAuthTokenInvalid, nil)
 			c.Abort()
 			return
 		}
@@ -136,12 +136,12 @@ func RequireTeamAccess(level string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ta, ok := TeamAuthFromCtx(c)
 		if !ok {
-			response.FailCode(c, http.StatusForbidden, response.CodeAuthForbidden, nil)
+			response.FailCode(c, http.StatusForbidden, response.CodeForbidden, nil)
 			c.Abort()
 			return
 		}
 		if !accessLevelGTE(ta.AppAccess, level) {
-			response.FailCode(c, http.StatusForbidden, response.CodeAuthForbidden, nil)
+			response.FailCode(c, http.StatusForbidden, response.CodeForbidden, nil)
 			c.Abort()
 			return
 		}
@@ -154,7 +154,7 @@ func RequireTeamCapability(capability string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ta, ok := TeamAuthFromCtx(c)
 		if !ok {
-			response.FailCode(c, http.StatusForbidden, response.CodeAuthForbidden, nil)
+			response.FailCode(c, http.StatusForbidden, response.CodeForbidden, nil)
 			c.Abort()
 			return
 		}
@@ -164,7 +164,7 @@ func RequireTeamCapability(capability string) gin.HandlerFunc {
 				return
 			}
 		}
-		response.FailCode(c, http.StatusForbidden, response.CodeAuthForbidden, nil)
+		response.FailCode(c, http.StatusForbidden, response.CodeForbidden, nil)
 		c.Abort()
 	}
 }

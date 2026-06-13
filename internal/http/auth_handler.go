@@ -66,8 +66,8 @@ type registerReq struct {
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req registerReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.SetAuthErrorCode(c, response.CodeCommonBadRequest)
-		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
+		middleware.SetAuthErrorCode(c, response.CodeBadRequest)
+		response.FailCode(c, http.StatusBadRequest, response.CodeBadRequest, nil)
 		return
 	}
 	if !h.emailValidate(req.Email) {
@@ -103,8 +103,8 @@ type loginReq struct {
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req loginReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.SetAuthErrorCode(c, response.CodeCommonBadRequest)
-		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
+		middleware.SetAuthErrorCode(c, response.CodeBadRequest)
+		response.FailCode(c, http.StatusBadRequest, response.CodeBadRequest, nil)
 		return
 	}
 	res, err := h.auth.Login(c.Request.Context(), req.Email, req.Password, domain.ClientMeta{
@@ -159,8 +159,8 @@ type refreshReq struct {
 func (h *AuthHandler) Refresh(c *gin.Context) {
 	var req refreshReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.SetAuthErrorCode(c, response.CodeCommonBadRequest)
-		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
+		middleware.SetAuthErrorCode(c, response.CodeBadRequest)
+		response.FailCode(c, http.StatusBadRequest, response.CodeBadRequest, nil)
 		return
 	}
 	res, err := h.auth.Refresh(c.Request.Context(), req.RefreshToken, domain.ClientMeta{
@@ -184,8 +184,8 @@ type completeMFAReq struct {
 func (h *AuthHandler) CompleteMFA(c *gin.Context) {
 	var req completeMFAReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.SetAuthErrorCode(c, response.CodeCommonBadRequest)
-		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
+		middleware.SetAuthErrorCode(c, response.CodeBadRequest)
+		response.FailCode(c, http.StatusBadRequest, response.CodeBadRequest, nil)
 		return
 	}
 	res, err := h.auth.CompleteMFA(c.Request.Context(), req.MFAToken, req.Code, domain.ClientMeta{
@@ -205,14 +205,14 @@ func (h *AuthHandler) CompleteMFA(c *gin.Context) {
 func (h *AuthHandler) Logout(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		middleware.SetAuthErrorCode(c, response.CodeAuthUnauthorized)
-		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
+		middleware.SetAuthErrorCode(c, response.CodeUnauthorized)
+		response.FailCode(c, http.StatusUnauthorized, response.CodeUnauthorized, nil)
 		return
 	}
 	jti, exp, ok := middleware.AccessTokenMetaFromCtx(c)
 	if !ok {
-		middleware.SetAuthErrorCode(c, response.CodeAuthUnauthorized)
-		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
+		middleware.SetAuthErrorCode(c, response.CodeUnauthorized)
+		response.FailCode(c, http.StatusUnauthorized, response.CodeUnauthorized, nil)
 		return
 	}
 	if err := h.auth.Logout(c.Request.Context(), userID, jti, exp); err != nil {
@@ -229,15 +229,15 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 func (h *AuthHandler) Me(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		middleware.SetAuthErrorCode(c, response.CodeAuthUnauthorized)
-		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
+		middleware.SetAuthErrorCode(c, response.CodeUnauthorized)
+		response.FailCode(c, http.StatusUnauthorized, response.CodeUnauthorized, nil)
 		return
 	}
 
 	u, err := h.users.GetByID(c.Request.Context(), userID)
 	if err != nil {
-		middleware.SetAuthErrorCode(c, response.CodeAuthUnauthorized)
-		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
+		middleware.SetAuthErrorCode(c, response.CodeUnauthorized)
+		response.FailCode(c, http.StatusUnauthorized, response.CodeUnauthorized, nil)
 		return
 	}
 
@@ -255,8 +255,8 @@ func (h *AuthHandler) Me(c *gin.Context) {
 func (h *AuthHandler) RequestVerifyEmail(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		middleware.SetAuthErrorCode(c, response.CodeAuthUnauthorized)
-		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
+		middleware.SetAuthErrorCode(c, response.CodeUnauthorized)
+		response.FailCode(c, http.StatusUnauthorized, response.CodeUnauthorized, nil)
 		return
 	}
 	if h.emailSvc == nil || h.emailSvc.RequestVerifyEmail(c.Request.Context(), userID) != nil {
@@ -276,8 +276,8 @@ type confirmTokenReq struct {
 func (h *AuthHandler) ConfirmVerifyEmail(c *gin.Context) {
 	var req confirmTokenReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.SetAuthErrorCode(c, response.CodeCommonBadRequest)
-		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
+		middleware.SetAuthErrorCode(c, response.CodeBadRequest)
+		response.FailCode(c, http.StatusBadRequest, response.CodeBadRequest, nil)
 		return
 	}
 	if h.emailSvc == nil || h.emailSvc.ConfirmVerifyEmail(c.Request.Context(), req.Token) != nil {
@@ -297,8 +297,8 @@ type forgotPasswordReq struct {
 func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 	var req forgotPasswordReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.SetAuthErrorCode(c, response.CodeCommonBadRequest)
-		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
+		middleware.SetAuthErrorCode(c, response.CodeBadRequest)
+		response.FailCode(c, http.StatusBadRequest, response.CodeBadRequest, nil)
 		return
 	}
 	if h.emailSvc == nil || h.emailSvc.ForgotPassword(c.Request.Context(), req.Email) != nil {
@@ -319,8 +319,8 @@ type resetPasswordReq struct {
 func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	var req resetPasswordReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.SetAuthErrorCode(c, response.CodeCommonBadRequest)
-		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
+		middleware.SetAuthErrorCode(c, response.CodeBadRequest)
+		response.FailCode(c, http.StatusBadRequest, response.CodeBadRequest, nil)
 		return
 	}
 	if h.emailSvc == nil || h.emailSvc.ResetPassword(c.Request.Context(), req.Token, req.NewPassword) != nil {

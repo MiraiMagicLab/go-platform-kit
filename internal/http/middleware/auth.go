@@ -72,7 +72,7 @@ func JWTAuth(jwtm *token.JWTManager, users ports.UserRepository, denylist ports.
 	return func(c *gin.Context) {
 		h := c.GetHeader("Authorization")
 		if h == "" || !strings.HasPrefix(h, "Bearer ") {
-			response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
+			response.FailCode(c, http.StatusUnauthorized, response.CodeUnauthorized, nil)
 			c.Abort()
 			return
 		}
@@ -83,7 +83,7 @@ func JWTAuth(jwtm *token.JWTManager, users ports.UserRepository, denylist ports.
 			if token.IsExpired(err) {
 				response.FailCode(c, http.StatusUnauthorized, response.CodeAuthTokenExpired, nil)
 			} else {
-				response.FailCode(c, http.StatusUnauthorized, response.CodeAuthInvalidToken, nil)
+				response.FailCode(c, http.StatusUnauthorized, response.CodeAuthTokenInvalid, nil)
 			}
 			c.Abort()
 			return
@@ -91,7 +91,7 @@ func JWTAuth(jwtm *token.JWTManager, users ports.UserRepository, denylist ports.
 
 		userID, err := uuid.Parse(claims.Subject)
 		if err != nil {
-			response.FailCode(c, http.StatusUnauthorized, response.CodeAuthInvalidToken, nil)
+			response.FailCode(c, http.StatusUnauthorized, response.CodeAuthTokenInvalid, nil)
 			c.Abort()
 			return
 		}
@@ -125,7 +125,7 @@ func JWTAuth(jwtm *token.JWTManager, users ports.UserRepository, denylist ports.
 			return
 		}
 		if u.IsDeleted() {
-			response.Fail(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
+			response.Fail(c, http.StatusUnauthorized, response.CodeUnauthorized, nil)
 			c.Abort()
 			return
 		}

@@ -30,7 +30,7 @@ func Success(c *gin.Context, status int, code string, data interface{}, params m
 
 func Fail(c *gin.Context, status int, code string, params map[string]interface{}) {
 	if code == "" {
-		code = "system.unknown_error"
+		code = CodeUnknownError
 	}
 	c.JSON(status, ApiResponse{
 		Success: false,
@@ -42,7 +42,7 @@ func Fail(c *gin.Context, status int, code string, params map[string]interface{}
 // FailCode returns an error response with stable code for client i18n.
 func FailCode(c *gin.Context, status int, code string, params map[string]interface{}) {
 	if code == "" {
-		code = "system.unknown_error"
+		code = CodeUnknownError
 	}
 	c.JSON(status, ApiResponse{
 		Success: false,
@@ -78,7 +78,7 @@ func RenderMessage(template string, args ...interface{}) string {
 
 // FailNotFound responds with 404 and the standard not-found code.
 func FailNotFound(c *gin.Context) {
-	FailCode(c, http.StatusNotFound, CodeCommonNotFound, nil)
+	FailCode(c, http.StatusNotFound, CodeNotFound, nil)
 }
 
 // PaginationMeta describes common limit/offset pagination.
@@ -149,25 +149,27 @@ func Created(c *gin.Context, data interface{}) {
 func StatusToErrorCode(status int) string {
 	switch status {
 	case http.StatusBadRequest:
-		return "common.bad_request"
+		return CodeBadRequest
 	case http.StatusUnauthorized:
-		return "auth.unauthorized"
+		return CodeUnauthorized
 	case http.StatusForbidden:
-		return "auth.forbidden"
+		return CodeForbidden
 	case http.StatusNotFound:
-		return "common.not_found"
+		return CodeNotFound
+	case http.StatusConflict:
+		return CodeConflict
 	case http.StatusTooManyRequests:
-		return "common.too_many_requests"
+		return CodeRateLimited
 	case http.StatusInternalServerError:
-		return "common.internal_error"
+		return CodeInternal
 	default:
 		if status >= 400 && status < 500 {
-			return "common.bad_request"
+			return CodeBadRequest
 		}
 		if status >= 500 {
-			return "common.internal_error"
+			return CodeInternal
 		}
-		return "common.unknown_error"
+		return CodeUnknownError
 	}
 }
 

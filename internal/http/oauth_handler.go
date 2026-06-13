@@ -58,7 +58,7 @@ func (h *OAuthHandler) Callback(c *gin.Context) {
 	state := c.Query("state")
 	code := c.Query("code")
 	if code == "" {
-		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
+		response.FailCode(c, http.StatusBadRequest, response.CodeBadRequest, nil)
 		return
 	}
 	cookieName := "oauth_state_" + string(provider)
@@ -85,7 +85,7 @@ func (h *OAuthHandler) Callback(c *gin.Context) {
 		UA: c.Request.UserAgent(),
 	}, "")
 	if err != nil {
-		response.FailCode(c, http.StatusInternalServerError, response.CodeCommonInternal, nil)
+		response.FailCode(c, http.StatusInternalServerError, response.CodeInternal, nil)
 		return
 	}
 

@@ -25,12 +25,12 @@ func NewSessionHandler(sessionSvc *session.SessionService, auditSvc *audit.Audit
 func (h *SessionHandler) List(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
+		response.FailCode(c, http.StatusUnauthorized, response.CodeUnauthorized, nil)
 		return
 	}
 	sessions, err := h.sessionSvc.List(c.Request.Context(), userID)
 	if err != nil {
-		response.FailCode(c, http.StatusInternalServerError, response.CodeCommonInternal, nil)
+		response.FailCode(c, http.StatusInternalServerError, response.CodeInternal, nil)
 		return
 	}
 	currentSessionID := middleware.SessionIDFromCtx(c)
@@ -61,22 +61,22 @@ func (h *SessionHandler) List(c *gin.Context) {
 func (h *SessionHandler) RevokeOne(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
+		response.FailCode(c, http.StatusUnauthorized, response.CodeUnauthorized, nil)
 		return
 	}
 	targetID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
+		response.FailCode(c, http.StatusBadRequest, response.CodeBadRequest, nil)
 		return
 	}
 	currentSessionID := middleware.SessionIDFromCtx(c)
 	jti, exp, _ := middleware.AccessTokenMetaFromCtx(c)
 	if err := h.sessionSvc.RevokeSession(c.Request.Context(), userID, targetID, currentSessionID, jti, exp); err != nil {
 		if err == session.ErrSessionNotFound {
-			response.FailCode(c, http.StatusNotFound, response.CodeCommonNotFound, nil)
+			response.FailCode(c, http.StatusNotFound, response.CodeNotFound, nil)
 			return
 		}
-		response.FailCode(c, http.StatusInternalServerError, response.CodeCommonInternal, nil)
+		response.FailCode(c, http.StatusInternalServerError, response.CodeInternal, nil)
 		return
 	}
 	h.auditSvc.Log(c.Request.Context(), &userID, "session.revoke", "success", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"target": targetID.String()})
@@ -86,12 +86,12 @@ func (h *SessionHandler) RevokeOne(c *gin.Context) {
 func (h *SessionHandler) RevokeOthers(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
+		response.FailCode(c, http.StatusUnauthorized, response.CodeUnauthorized, nil)
 		return
 	}
 	keepSessionID := middleware.SessionIDFromCtx(c)
 	if err := h.sessionSvc.RevokeOtherSessions(c.Request.Context(), userID, keepSessionID); err != nil {
-		response.FailCode(c, http.StatusInternalServerError, response.CodeCommonInternal, nil)
+		response.FailCode(c, http.StatusInternalServerError, response.CodeInternal, nil)
 		return
 	}
 	h.auditSvc.Log(c.Request.Context(), &userID, "session.revoke_others", "success", c.ClientIP(), c.Request.UserAgent(), nil)

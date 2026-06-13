@@ -26,12 +26,12 @@ func NewMFAHandler(mfaSvc *mfa.MFAService, auditSvc *audit.AuditService, users p
 func (h *MFAHandler) Setup(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
+		response.FailCode(c, http.StatusUnauthorized, response.CodeUnauthorized, nil)
 		return
 	}
 	u, err := h.users.GetByID(c.Request.Context(), userID)
 	if err != nil {
-		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
+		response.FailCode(c, http.StatusUnauthorized, response.CodeUnauthorized, nil)
 		return
 	}
 	setup, err := h.mfaSvc.SetupTOTP(c.Request.Context(), userID, u.Email)
@@ -50,12 +50,12 @@ type enableMFAReq struct {
 func (h *MFAHandler) Enable(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
+		response.FailCode(c, http.StatusUnauthorized, response.CodeUnauthorized, nil)
 		return
 	}
 	var req enableMFAReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
+		response.FailCode(c, http.StatusBadRequest, response.CodeBadRequest, nil)
 		return
 	}
 	if err := h.mfaSvc.EnableTOTP(c.Request.Context(), userID, req.Code); err != nil {
@@ -75,12 +75,12 @@ type disableMFAReq struct {
 func (h *MFAHandler) Disable(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		response.FailCode(c, http.StatusUnauthorized, response.CodeAuthUnauthorized, nil)
+		response.FailCode(c, http.StatusUnauthorized, response.CodeUnauthorized, nil)
 		return
 	}
 	var req disableMFAReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.FailCode(c, http.StatusBadRequest, response.CodeCommonBadRequest, nil)
+		response.FailCode(c, http.StatusBadRequest, response.CodeBadRequest, nil)
 		return
 	}
 	if req.Password == "" && req.Code == "" {

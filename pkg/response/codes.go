@@ -1,107 +1,67 @@
 package response
 
+// ── Platform Common (PP=00) ──────────────────────────────────────────────
+
 const (
-	CodeAuthInvalidCredentials  = "auth.invalid.credentials"
-	CodeAuthInvalidEmail        = "auth.invalid.email"
-	CodeAuthInvalidPassword     = "auth.invalid.password"
-	CodeAuthInvalidToken        = "auth.token.invalid"
-	CodeAuthTokenExpired        = "auth.token.expired"
-	CodeAuthTokenRevoked        = "auth.token.revoked"
-	CodeAuthUnauthorized        = "auth.unauthorized"
-	CodeAuthForbidden           = "auth.forbidden"
-	CodeAuthInvalidRefresh      = "auth.token.invalid_refresh"
-	CodeAuthInvalidMFA          = "auth.invalid.mfa"
-	CodeAuthRegisterFailed      = "auth.action.register_fail"
-	CodeAuthLogoutFailed        = "auth.action.logout_fail"
-	CodeAuthEmailSendFailed     = "auth.email.send_fail"
-	CodeAuthInvalidActionToken  = "auth.token.invalid_action"
-	CodeAuthPasswordResetFailed = "auth.action.password_reset_fail"
-	CodeAuthEmailNotVerified    = "auth.email.not_verified"
-	CodeAuthUserBanned          = "auth.user.banned"
-	CodeAuthAccountLocked       = "auth.user.locked"
-	CodeSessionNotFound         = "auth.session.not_found"
-	CodeAuthSessionUnsupported  = "auth.session.no_sid_in_token"
-
-	CodeRBACCreateRoleFailed       = "rbac.action.create_role_fail"
-	CodeRBACCreatePermissionFailed = "rbac.action.create_permission_fail"
-	CodeRBACAssignFailed           = "rbac.action.assign_fail"
-
-	CodeMFASetupFailed   = "mfa.action.setup_fail"
-	CodeMFAEnableFailed  = "mfa.action.enable_fail"
-	CodeMFADisableFailed = "mfa.action.disable_fail"
-
-	CodeOAuthStateInvalid  = "oauth.invalid.state"
-	CodeOAuthExchangeFail  = "oauth.action.exchange_fail"
-	CodeOAuthUserFail      = "oauth.action.user_fail"
-	CodeOAuthNotConfigured = "oauth.config.not_found"
-
-	CodeCommonBadRequest      = "common.invalid.request"
-	CodeCommonInternal        = "common.system.error"
-	CodeCommonTooManyRequests = "common.rate_limit.error"
-	CodeCommonNotFound        = "common.resource.not_found"
+	CodeUnknownError = "M0000000"
+	CodeBadRequest   = "M0000001"
+	CodeUnauthorized = "M0000002"
+	CodeForbidden    = "M0000003"
+	CodeNotFound     = "M0000004"
+	CodeConflict     = "M0000005"
+	CodeRateLimited  = "M0000006"
+	CodeInternal     = "M0000007"
 )
 
-var defaultMessages = map[string]string{
-	CodeAuthInvalidCredentials:  "Invalid credentials",
-	CodeAuthInvalidEmail:        "Invalid email format",
-	CodeAuthInvalidPassword:     "Password must be at least 8 characters",
-	CodeAuthInvalidToken:        "Invalid token",
-	CodeAuthTokenExpired:        "Token expired",
-	CodeAuthTokenRevoked:        "Token revoked",
-	CodeAuthUnauthorized:        "Unauthorized",
-	CodeAuthForbidden:           "Forbidden",
-	CodeAuthInvalidRefresh:      "Invalid refresh token",
-	CodeAuthInvalidMFA:          "Invalid MFA code",
-	CodeAuthRegisterFailed:      "Could not register user",
-	CodeAuthLogoutFailed:        "Could not logout",
-	CodeAuthEmailSendFailed:     "Could not send email",
-	CodeAuthInvalidActionToken:  "Invalid or expired token",
-	CodeAuthPasswordResetFailed: "Could not reset password",
-	CodeAuthEmailNotVerified:    "Email address is not verified",
-	CodeAuthUserBanned:          "User is temporarily banned",
-	CodeAuthAccountLocked:       "Account is temporarily locked due to too many failed login attempts",
-	CodeSessionNotFound:         "Session not found or already revoked",
-	CodeAuthSessionUnsupported:  "Operation requires a session-scoped access token",
+// ── Auth (PP=00, CC=01) ─────────────────────────────────────────────────
 
-	CodeRBACCreateRoleFailed:       "Could not create role",
-	CodeRBACCreatePermissionFailed: "Could not create permission",
-	CodeRBACAssignFailed:           "Could not assign",
+const (
+	CodeAuthInvalidCredentials  = "M0001001"
+	CodeAuthInvalidEmail        = "M0001002"
+	CodeAuthInvalidPassword     = "M0001003"
+	CodeAuthTokenInvalid        = "M0001004"
+	CodeAuthTokenExpired        = "M0001005"
+	CodeAuthTokenRevoked        = "M0001006"
+	CodeAuthInvalidRefresh      = "M0001007"
+	CodeAuthEmailNotVerified    = "M0001008"
+	CodeAuthUserBanned          = "M0001009"
+	CodeAuthAccountLocked       = "M0001010"
+	CodeAuthRegisterFailed      = "M0001011"
+	CodeAuthLogoutFailed        = "M0001012"
+	CodeAuthPasswordResetFailed = "M0001013"
+	CodeAuthEmailSendFailed     = "M0001014"
+	CodeAuthInvalidActionToken  = "M0001015"
+	CodeAuthInvalidMFA          = "M0001016"
+)
 
-	CodeMFASetupFailed:   "Could not setup MFA",
-	CodeMFAEnableFailed:  "Could not enable MFA",
-	CodeMFADisableFailed: "Could not disable MFA",
+// ── Session (PP=00, CC=02) ──────────────────────────────────────────────
 
-	CodeOAuthStateInvalid:  "Invalid OAuth state",
-	CodeOAuthExchangeFail:  "OAuth exchange failed",
-	CodeOAuthUserFail:      "OAuth user processing failed",
-	CodeOAuthNotConfigured: "OAuth provider is not configured",
+const (
+	CodeSessionNotFound     = "M0002001"
+	CodeSessionNoSIDInToken = "M0002002"
+)
 
-	CodeCommonBadRequest:      "Invalid request body",
-	CodeCommonInternal:        "Internal server error",
-	CodeCommonTooManyRequests: "Too many requests, please try again later",
-	CodeCommonNotFound:        "Not found",
+// ── RBAC (PP=00, CC=03) ────────────────────────────────────────────────
 
-	// Example for positional placeholder support.
-	"test.multi_param": "Hello {0}, you have {1} new messages in your {2} bucket.",
-}
+const (
+	CodeRBACCreateRoleFailed       = "M0003001"
+	CodeRBACCreatePermissionFailed = "M0003002"
+	CodeRBACAssignFailed           = "M0003003"
+)
 
-// DefaultMessage resolves a human-readable message for a code.
-// This is primarily used for backend-generated content like notifications or logs.
-// For API responses, the frontend should use the Code to look up localized strings.
-func DefaultMessage(code string) string {
-	if msg, ok := defaultMessages[code]; ok {
-		return msg
-	}
-	return "" // No default message found
-}
+// ── MFA (PP=00, CC=04) ─────────────────────────────────────────────────
 
-// MergeDefaultMessages registers additional code -> defaultMessage entries
-// for host applications (e.g. lingo-engine) so FailCode can resolve user-facing text.
-func MergeDefaultMessages(extra map[string]string) {
-	for k, v := range extra {
-		if k == "" || v == "" {
-			continue
-		}
-		defaultMessages[k] = v
-	}
-}
+const (
+	CodeMFASetupFailed   = "M0004001"
+	CodeMFAEnableFailed  = "M0004002"
+	CodeMFADisableFailed = "M0004003"
+)
+
+// ── OAuth (PP=00, CC=05) ───────────────────────────────────────────────
+
+const (
+	CodeOAuthStateInvalid  = "M0005001"
+	CodeOAuthExchangeFail  = "M0005002"
+	CodeOAuthUserFail      = "M0005003"
+	CodeOAuthNotConfigured = "M0005004"
+)

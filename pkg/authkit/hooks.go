@@ -28,11 +28,11 @@ type Hooks struct {
 	// If nil, a default link under {PublicBaseURL}/auth is used.
 	BuildResetPasswordLink func(publicBaseURL, rawToken string) string
 
-	// RenderVerifyEmail returns subject/body for verify email email.
+	// RenderVerifyEmail returns subject and body for the email verification message.
 	// If nil, default plaintext is used.
 	RenderVerifyEmail func(link string) (subject string, body string)
 
-	// RenderResetPassword returns subject/body for reset password email.
+	// RenderResetPassword returns subject and body for the password reset email.
 	// If nil, default plaintext is used.
 	RenderResetPassword func(link string) (subject string, body string)
 

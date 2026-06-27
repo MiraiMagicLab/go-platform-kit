@@ -1,3 +1,5 @@
+// Package adminschema provides types and utilities for parsing and compiling
+// admin panel contracts into runtime Shell configurations.
 package adminschema
 
 import (

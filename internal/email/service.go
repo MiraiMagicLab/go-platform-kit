@@ -26,16 +26,22 @@ const (
 type DeliveryMode string
 
 const (
-	DeliveryOTP  DeliveryMode = "otp"
+	// DeliveryOTP sends a one-time password code via email.
+	DeliveryOTP DeliveryMode = "otp"
+	// DeliveryLink sends a clickable reset link via email.
 	DeliveryLink DeliveryMode = "link"
 )
 
 // Hooks provides customization for email links and templates.
 type Hooks struct {
-	BuildVerifyEmailLink   func(publicBaseURL, rawToken string) string
+	// BuildVerifyEmailLink constructs the full verification URL from a base URL and raw token.
+	BuildVerifyEmailLink func(publicBaseURL, rawToken string) string
+	// BuildResetPasswordLink constructs the full password reset URL from a base URL and raw token.
 	BuildResetPasswordLink func(publicBaseURL, rawToken string) string
-	RenderVerifyEmail      func(link string) (subject string, body string)
-	RenderResetPassword    func(link string) (subject string, body string)
+	// RenderVerifyEmail returns the email subject and body for the verification email.
+	RenderVerifyEmail func(link string) (subject string, body string)
+	// RenderResetPassword returns the email subject and body for the password reset email.
+	RenderResetPassword func(link string) (subject string, body string)
 }
 
 // EmailService handles email verification and password reset flows.

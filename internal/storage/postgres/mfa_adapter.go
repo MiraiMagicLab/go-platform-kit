@@ -18,6 +18,7 @@ type MFAAdapter struct {
 	repo *postgres.MFARepo
 }
 
+// NewMFAAdapter creates a MFAAdapter wrapping the given MFARepo.
 func NewMFAAdapter(repo *postgres.MFARepo) *MFAAdapter {
 	return &MFAAdapter{repo: repo}
 }

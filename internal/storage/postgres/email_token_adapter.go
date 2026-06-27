@@ -17,6 +17,7 @@ type EmailTokenAdapter struct {
 	repo *postgres.EmailTokenRepo
 }
 
+// NewEmailTokenAdapter creates a EmailTokenAdapter wrapping the given EmailTokenRepo.
 func NewEmailTokenAdapter(repo *postgres.EmailTokenRepo) *EmailTokenAdapter {
 	return &EmailTokenAdapter{repo: repo}
 }

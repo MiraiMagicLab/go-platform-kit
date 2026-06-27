@@ -18,6 +18,7 @@ type RefreshTokenAdapter struct {
 	repo *postgres.RefreshTokenRepo
 }
 
+// NewRefreshTokenAdapter creates a RefreshTokenAdapter wrapping the given RefreshTokenRepo.
 func NewRefreshTokenAdapter(repo *postgres.RefreshTokenRepo) *RefreshTokenAdapter {
 	return &RefreshTokenAdapter{repo: repo}
 }

@@ -9,14 +9,17 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// SessionsRepo provides PostgreSQL-backed persistence for user login sessions.
 type SessionsRepo struct {
 	db *pgxpool.Pool
 }
 
+// NewSessionsRepo returns a SessionsRepo backed by the given connection pool.
 func NewSessionsRepo(db *pgxpool.Pool) *SessionsRepo {
 	return &SessionsRepo{db: db}
 }
 
+// Create inserts a new login session and returns its generated ID.
 func (r *SessionsRepo) Create(ctx context.Context, userID uuid.UUID, deviceName, ip, ua string) (uuid.UUID, error) {
 	var id uuid.UUID
 	err := r.db.QueryRow(ctx, `
@@ -27,6 +30,7 @@ func (r *SessionsRepo) Create(ctx context.Context, userID uuid.UUID, deviceName,
 	return id, err
 }
 
+// CreateWithID inserts a session with an explicit ID. It is a no-op if the ID already exists.
 func (r *SessionsRepo) CreateWithID(ctx context.Context, id, userID uuid.UUID, deviceName, ip, ua string, createdAt time.Time) error {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO sessions (id, user_id, device_name, ip_address, user_agent, created_at, last_seen_at)
@@ -36,6 +40,7 @@ func (r *SessionsRepo) CreateWithID(ctx context.Context, id, userID uuid.UUID, d
 	return err
 }
 
+// ListActive returns all non-revoked sessions for the given user that were active within the last 30 days.
 func (r *SessionsRepo) ListActive(ctx context.Context, userID uuid.UUID) ([]SessionRow, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT id, user_id, device_name, ip_address, user_agent, created_at, last_seen_at, revoked_at
@@ -61,6 +66,7 @@ func (r *SessionsRepo) ListActive(ctx context.Context, userID uuid.UUID) ([]Sess
 	return out, rows.Err()
 }
 
+// Touch updates the session's last seen time and optionally its IP, user agent, and device name.
 func (r *SessionsRepo) Touch(ctx context.Context, sessionID uuid.UUID, ip, ua, deviceName string) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE sessions
@@ -73,6 +79,7 @@ func (r *SessionsRepo) Touch(ctx context.Context, sessionID uuid.UUID, ip, ua, d
 	return err
 }
 
+// Revoke marks the given session as revoked. It returns the number of rows affected.
 func (r *SessionsRepo) Revoke(ctx context.Context, sessionID uuid.UUID) (int64, error) {
 	tag, err := r.db.Exec(ctx, `
 		UPDATE sessions
@@ -82,6 +89,8 @@ func (r *SessionsRepo) Revoke(ctx context.Context, sessionID uuid.UUID) (int64, 
 	return tag.RowsAffected(), err
 }
 
+// RevokeAllExcept revokes all active sessions for the user except the one identified by keepSessionID.
+// It returns the number of rows affected.
 func (r *SessionsRepo) RevokeAllExcept(ctx context.Context, userID, keepSessionID uuid.UUID) (int64, error) {
 	tag, err := r.db.Exec(ctx, `
 		UPDATE sessions
@@ -93,6 +102,7 @@ func (r *SessionsRepo) RevokeAllExcept(ctx context.Context, userID, keepSessionI
 	return tag.RowsAffected(), err
 }
 
+// GetByID returns the session with the given ID. If no session exists, it returns a zero-value SessionRow and nil error.
 func (r *SessionsRepo) GetByID(ctx context.Context, sessionID uuid.UUID) (SessionRow, error) {
 	var s SessionRow
 	err := r.db.QueryRow(ctx, `
@@ -109,6 +119,7 @@ func (r *SessionsRepo) GetByID(ctx context.Context, sessionID uuid.UUID) (Sessio
 	return s, nil
 }
 
+// RevokeAllForUser revokes all active sessions for the given user.
 func (r *SessionsRepo) RevokeAllForUser(ctx context.Context, userID uuid.UUID) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE sessions SET revoked_at = NOW()
@@ -117,6 +128,7 @@ func (r *SessionsRepo) RevokeAllForUser(ctx context.Context, userID uuid.UUID) e
 	return err
 }
 
+// Cleanup deletes sessions that were revoked more than 30 days ago.
 func (r *SessionsRepo) Cleanup(ctx context.Context, now time.Time) error {
 	_, err := r.db.Exec(ctx, `
 		DELETE FROM sessions

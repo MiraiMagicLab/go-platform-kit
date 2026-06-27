@@ -7,6 +7,7 @@ import (
 )
 
 const (
+	// OAuthCookieMaxAge is the lifetime in seconds of the OAuth CSRF state cookie.
 	OAuthCookieMaxAge = 300 // 5 minutes
 )
 

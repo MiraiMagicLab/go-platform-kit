@@ -9,12 +9,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// EmailTokenRepo provides PostgreSQL-backed persistence for single-use email action tokens
+// (e.g. email verification, password reset).
 type EmailTokenRepo struct {
 	db *pgxpool.Pool
 }
 
+// NewEmailTokenRepo returns an EmailTokenRepo backed by the given connection pool.
 func NewEmailTokenRepo(db *pgxpool.Pool) *EmailTokenRepo { return &EmailTokenRepo{db: db} }
 
+// Create inserts a new email action token.
 func (r *EmailTokenRepo) Create(ctx context.Context, userID uuid.UUID, actionType, tokenHash string, expiresAt time.Time) error {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO email_action_tokens (user_id, action_type, token_hash, expires_at)
@@ -23,6 +27,9 @@ func (r *EmailTokenRepo) Create(ctx context.Context, userID uuid.UUID, actionTyp
 	return err
 }
 
+// Consume atomically validates and marks a single-use email action token as consumed within a transaction.
+// It returns the associated user ID and true if the token was valid and consumed,
+// or uuid.Nil and false if the token was not found, already used, or expired.
 func (r *EmailTokenRepo) Consume(ctx context.Context, actionType, tokenHash string, now time.Time) (uuid.UUID, bool, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
@@ -57,6 +64,7 @@ func (r *EmailTokenRepo) Consume(ctx context.Context, actionType, tokenHash stri
 	return userID, true, nil
 }
 
+// Cleanup deletes expired tokens and tokens consumed more than 30 days ago.
 func (r *EmailTokenRepo) Cleanup(ctx context.Context, now time.Time) error {
 	_, err := r.db.Exec(ctx, `
 		DELETE FROM email_action_tokens
@@ -65,4 +73,3 @@ func (r *EmailTokenRepo) Cleanup(ctx context.Context, now time.Time) error {
 	`, now)
 	return err
 }
-

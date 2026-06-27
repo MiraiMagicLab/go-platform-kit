@@ -9,14 +9,17 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// RefreshTokenRepo provides PostgreSQL-backed persistence for refresh tokens.
 type RefreshTokenRepo struct {
 	db *pgxpool.Pool
 }
 
+// NewRefreshTokenRepo returns a RefreshTokenRepo backed by the given connection pool.
 func NewRefreshTokenRepo(db *pgxpool.Pool) *RefreshTokenRepo {
 	return &RefreshTokenRepo{db: db}
 }
 
+// Create inserts a new refresh token and returns its ID.
 func (r *RefreshTokenRepo) Create(ctx context.Context, userID, sessionID uuid.UUID, tokenHash string, expiresAt time.Time, ip, ua, deviceName string) (uuid.UUID, error) {
 	var id uuid.UUID
 	err := r.db.QueryRow(ctx, `
@@ -27,6 +30,7 @@ func (r *RefreshTokenRepo) Create(ctx context.Context, userID, sessionID uuid.UU
 	return id, err
 }
 
+// GetByHash returns the refresh token matching the given hash.
 func (r *RefreshTokenRepo) GetByHash(ctx context.Context, tokenHash string) (RefreshTokenDTO, error) {
 	var t RefreshTokenDTO
 	err := r.db.QueryRow(ctx, `
@@ -37,6 +41,8 @@ func (r *RefreshTokenRepo) GetByHash(ctx context.Context, tokenHash string) (Ref
 	return t, err
 }
 
+// Revoke marks a single refresh token as revoked with reason "rotated".
+// It is a no-op if the token is already revoked.
 func (r *RefreshTokenRepo) Revoke(ctx context.Context, refreshTokenID uuid.UUID, replacedBy *uuid.UUID) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE refresh_tokens
@@ -48,6 +54,7 @@ func (r *RefreshTokenRepo) Revoke(ctx context.Context, refreshTokenID uuid.UUID,
 	return err
 }
 
+// RevokeAllForUser revokes all active refresh tokens for the given user.
 func (r *RefreshTokenRepo) RevokeAllForUser(ctx context.Context, userID uuid.UUID) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE refresh_tokens
@@ -86,6 +93,9 @@ func (r *RefreshTokenRepo) RevokeAllExceptSession(ctx context.Context, userID, k
 	return tag.RowsAffected(), nil
 }
 
+// Rotate atomically replaces an old refresh token with a new one inside a transaction.
+// If the old token is already revoked or expired, it revokes all tokens for the user (replay detection)
+// and returns ReplayDetected=true.
 func (r *RefreshTokenRepo) Rotate(ctx context.Context, oldTokenHash, newTokenHash string, newExpiresAt time.Time, clientIP, userAgent, deviceName string) (RotateResult, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
@@ -159,6 +169,7 @@ func (r *RefreshTokenRepo) Rotate(ctx context.Context, oldTokenHash, newTokenHas
 	}, nil
 }
 
+// Cleanup deletes expired refresh tokens and tokens revoked more than 30 days ago.
 func (r *RefreshTokenRepo) Cleanup(ctx context.Context, now time.Time) error {
 	_, err := r.db.Exec(ctx, `
 		DELETE FROM refresh_tokens

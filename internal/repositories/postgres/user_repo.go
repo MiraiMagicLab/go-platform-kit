@@ -10,10 +10,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// UserRepo provides PostgreSQL-backed persistence for user accounts.
 type UserRepo struct {
 	db *pgxpool.Pool
 }
 
+// ListUsersFilter defines the filtering and sorting criteria for ListUsers.
 type ListUsersFilter struct {
 	Search               string
 	Email                string
@@ -26,10 +28,13 @@ type ListUsersFilter struct {
 	SortOrder            string
 }
 
+// NewUserRepo returns a UserRepo backed by the given connection pool.
 func NewUserRepo(db *pgxpool.Pool) *UserRepo {
 	return &UserRepo{db: db}
 }
 
+// Create inserts a new user with the given email and password hash.
+// It returns the generated user ID.
 func (r *UserRepo) Create(ctx context.Context, email, passwordHash string) (uuid.UUID, error) {
 	var id uuid.UUID
 	err := r.db.QueryRow(ctx, `
@@ -40,6 +45,8 @@ func (r *UserRepo) Create(ctx context.Context, email, passwordHash string) (uuid
 	return id, err
 }
 
+// CreateOAuthUser inserts a new OAuth-provisioned user with password login disabled.
+// It returns the generated user ID.
 func (r *UserRepo) CreateOAuthUser(ctx context.Context, email, passwordHash string) (uuid.UUID, error) {
 	var id uuid.UUID
 	err := r.db.QueryRow(ctx, `
@@ -50,6 +57,8 @@ func (r *UserRepo) CreateOAuthUser(ctx context.Context, email, passwordHash stri
 	return id, err
 }
 
+// GetByEmail returns the user with the given email address.
+// It excludes soft-deleted users.
 func (r *UserRepo) GetByEmail(ctx context.Context, email string) (UserDTO, error) {
 	var u UserDTO
 	err := r.db.QueryRow(ctx, `
@@ -60,6 +69,8 @@ func (r *UserRepo) GetByEmail(ctx context.Context, email string) (UserDTO, error
 	return u, err
 }
 
+// GetByID returns the user with the given ID.
+// It excludes soft-deleted users.
 func (r *UserRepo) GetByID(ctx context.Context, id uuid.UUID) (UserDTO, error) {
 	var u UserDTO
 	err := r.db.QueryRow(ctx, `
@@ -70,6 +81,8 @@ func (r *UserRepo) GetByID(ctx context.Context, id uuid.UUID) (UserDTO, error) {
 	return u, err
 }
 
+// IncrementTokenVersion atomically increments the user's token version,
+// invalidating all previously issued refresh tokens for that user.
 func (r *UserRepo) IncrementTokenVersion(ctx context.Context, userID uuid.UUID) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE users
@@ -80,6 +93,7 @@ func (r *UserRepo) IncrementTokenVersion(ctx context.Context, userID uuid.UUID) 
 	return err
 }
 
+// SetPassword updates the password hash for the given user.
 func (r *UserRepo) SetPassword(ctx context.Context, userID uuid.UUID, passwordHash string) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE users
@@ -89,6 +103,7 @@ func (r *UserRepo) SetPassword(ctx context.Context, userID uuid.UUID, passwordHa
 	return err
 }
 
+// SetEmailVerified sets the email verification status for the given user.
 func (r *UserRepo) SetEmailVerified(ctx context.Context, userID uuid.UUID, verified bool) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE users
@@ -98,6 +113,8 @@ func (r *UserRepo) SetEmailVerified(ctx context.Context, userID uuid.UUID, verif
 	return err
 }
 
+// SetBan applies or lifts a ban on the given user.
+// A nil bannedUntil lifts the ban. It also resets failed login counters and lockouts.
 func (r *UserRepo) SetBan(ctx context.Context, userID uuid.UUID, bannedUntil *time.Time, reason string) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE users
@@ -110,6 +127,8 @@ func (r *UserRepo) SetBan(ctx context.Context, userID uuid.UUID, bannedUntil *ti
 	return err
 }
 
+// ListUsers returns a paginated, filtered list of users and the total count matching the filter.
+// Page is clamped to a minimum of 1, pageSize to [1, 100].
 func (r *UserRepo) ListUsers(ctx context.Context, page, pageSize int, f ListUsersFilter) ([]UserDTO, int, error) {
 	if page < 1 {
 		page = 1
@@ -206,6 +225,7 @@ func (r *UserRepo) ListUsers(ctx context.Context, page, pageSize int, f ListUser
 	return users, total, nil
 }
 
+// IncrementFailedLogin atomically increments the failed login counter for the given user.
 func (r *UserRepo) IncrementFailedLogin(ctx context.Context, userID uuid.UUID) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE users
@@ -215,6 +235,7 @@ func (r *UserRepo) IncrementFailedLogin(ctx context.Context, userID uuid.UUID) e
 	return err
 }
 
+// ResetFailedLogin clears the failed login counter and removes any account lockout for the given user.
 func (r *UserRepo) ResetFailedLogin(ctx context.Context, userID uuid.UUID) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE users
@@ -224,6 +245,7 @@ func (r *UserRepo) ResetFailedLogin(ctx context.Context, userID uuid.UUID) error
 	return err
 }
 
+// SetLock applies a temporary account lockout to the given user until the specified time.
 func (r *UserRepo) SetLock(ctx context.Context, userID uuid.UUID, until time.Time) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE users
@@ -233,6 +255,7 @@ func (r *UserRepo) SetLock(ctx context.Context, userID uuid.UUID, until time.Tim
 	return err
 }
 
+// SoftDelete marks the user as deleted, anonymizes their email, and invalidates all tokens.
 func (r *UserRepo) SoftDelete(ctx context.Context, userID uuid.UUID) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE users
@@ -243,4 +266,3 @@ func (r *UserRepo) SoftDelete(ctx context.Context, userID uuid.UUID) error {
 	`, userID)
 	return err
 }
-

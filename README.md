@@ -371,8 +371,6 @@ if shell.Enabled {
     }
 }
 
-// Migrate legacy permissions to capabilities
-result, changed, err := adminschema.MigrateSchemaContentV3(rawJSON)
 ```
 
 ### Migration CLI

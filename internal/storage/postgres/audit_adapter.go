@@ -15,6 +15,7 @@ type AuditAdapter struct {
 	repo *postgres.AuditRepo
 }
 
+// NewAuditAdapter creates a AuditAdapter wrapping the given AuditRepo.
 func NewAuditAdapter(repo *postgres.AuditRepo) *AuditAdapter {
 	return &AuditAdapter{repo: repo}
 }

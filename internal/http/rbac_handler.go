@@ -32,6 +32,7 @@ type createRoleReq struct {
 	Name string `json:"name" binding:"required"`
 }
 
+// CreateRole handles POST /rbac/roles. It creates a new role and returns its ID.
 func (h *RBACHandler) CreateRole(c *gin.Context) {
 	var req createRoleReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -50,6 +51,7 @@ type createPermissionReq struct {
 	Name string `json:"name" binding:"required"`
 }
 
+// CreatePermission handles POST /rbac/permissions. It creates a new permission and returns its ID.
 func (h *RBACHandler) CreatePermission(c *gin.Context) {
 	var req createPermissionReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -68,6 +70,8 @@ type assignPermissionsReq struct {
 	PermissionIDs []string `json:"permission_ids" binding:"required"`
 }
 
+// AssignPermissionsToRole handles PUT /rbac/roles/:id/permissions.
+// It replaces the permission set for the given role.
 func (h *RBACHandler) AssignPermissionsToRole(c *gin.Context) {
 	roleID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -99,6 +103,8 @@ type assignRolesReq struct {
 	RoleIDs []string `json:"role_ids" binding:"required"`
 }
 
+// AssignRolesToUser handles PUT /rbac/users/:id/roles.
+// It replaces the role set for the given user.
 func (h *RBACHandler) AssignRolesToUser(c *gin.Context) {
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -131,6 +137,8 @@ type banReq struct {
 	Reason string `json:"reason"`
 }
 
+// BanUser handles POST /admin/users/:id/ban. It bans the user until the specified time
+// with an optional reason.
 func (h *RBACHandler) BanUser(c *gin.Context) {
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -155,6 +163,7 @@ func (h *RBACHandler) BanUser(c *gin.Context) {
 	response.Success(c, http.StatusOK, "success", gin.H{"ok": true}, nil)
 }
 
+// UnbanUser handles POST /admin/users/:id/unban. It removes the ban from the user.
 func (h *RBACHandler) UnbanUser(c *gin.Context) {
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -169,6 +178,7 @@ func (h *RBACHandler) UnbanUser(c *gin.Context) {
 	response.Success(c, http.StatusOK, "success", gin.H{"ok": true}, nil)
 }
 
+// DeleteUser handles DELETE /admin/users/:id. It soft-deletes the specified user.
 func (h *RBACHandler) DeleteUser(c *gin.Context) {
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -183,6 +193,8 @@ func (h *RBACHandler) DeleteUser(c *gin.Context) {
 	response.Success(c, http.StatusOK, "success", gin.H{"ok": true}, nil)
 }
 
+// ListUsers handles GET /admin/users. It returns a paginated list of users
+// with optional filters for search, email, verification status, ban status, and sorting.
 func (h *RBACHandler) ListUsers(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
@@ -244,5 +256,3 @@ func parseTime(s string) (time.Time, error) {
 	}
 	return time.Time{}, fmt.Errorf("invalid time format: %s", s)
 }
-
-// Required imports are in the import block above.

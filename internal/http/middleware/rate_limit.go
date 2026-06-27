@@ -27,6 +27,8 @@ func NewInMemoryRateLimiter() *InMemoryRateLimiter {
 	}
 }
 
+// Allow reports whether a request with the given key is allowed under the rate limit.
+// It returns true if the request is within the limit for the current window, false otherwise.
 func (l *InMemoryRateLimiter) Allow(key string, limit int, window time.Duration) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()

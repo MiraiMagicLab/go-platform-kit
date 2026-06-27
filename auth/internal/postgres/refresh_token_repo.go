@@ -7,7 +7,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/domain"
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/ports"
 )
+
+var _ ports.RefreshTokenRepository = (*RefreshTokenRepo)(nil)
 
 // RefreshTokenRepo provides PostgreSQL-backed persistence for refresh tokens.
 type RefreshTokenRepo struct {
@@ -31,7 +36,15 @@ func (r *RefreshTokenRepo) Create(ctx context.Context, userID, sessionID uuid.UU
 }
 
 // GetByHash returns the refresh token matching the given hash.
-func (r *RefreshTokenRepo) GetByHash(ctx context.Context, tokenHash string) (RefreshTokenDTO, error) {
+func (r *RefreshTokenRepo) GetByHash(ctx context.Context, tokenHash string) (domain.RefreshToken, error) {
+	dto, err := r.getByHash(ctx, tokenHash)
+	if err != nil {
+		return domain.RefreshToken{}, err
+	}
+	return dtoToRefreshToken(dto), nil
+}
+
+func (r *RefreshTokenRepo) getByHash(ctx context.Context, tokenHash string) (RefreshTokenDTO, error) {
 	var t RefreshTokenDTO
 	err := r.db.QueryRow(ctx, `
 		SELECT id, user_id, session_id, token_hash, expires_at, revoked_at, revoked_reason, created_at, ip_address, user_agent, device_name, last_used_at
@@ -96,7 +109,21 @@ func (r *RefreshTokenRepo) RevokeAllExceptSession(ctx context.Context, userID, k
 // Rotate atomically replaces an old refresh token with a new one inside a transaction.
 // If the old token is already revoked or expired, it revokes all tokens for the user (replay detection)
 // and returns ReplayDetected=true.
-func (r *RefreshTokenRepo) Rotate(ctx context.Context, oldTokenHash, newTokenHash string, newExpiresAt time.Time, clientIP, userAgent, deviceName string) (RotateResult, error) {
+func (r *RefreshTokenRepo) Rotate(ctx context.Context, oldTokenHash, newTokenHash string, newExpiresAt time.Time, clientIP, userAgent, deviceName string) (domain.RotateResult, error) {
+	res, err := r.rotate(ctx, oldTokenHash, newTokenHash, newExpiresAt, clientIP, userAgent, deviceName)
+	if err != nil {
+		return domain.RotateResult{}, err
+	}
+	return domain.RotateResult{
+		UserID:            res.UserID,
+		SessionID:         res.SessionID,
+		NewRefreshTokenID: res.NewRefreshTokenID,
+		Invalid:           res.Invalid,
+		ReplayDetected:    res.ReplayDetected,
+	}, nil
+}
+
+func (r *RefreshTokenRepo) rotate(ctx context.Context, oldTokenHash, newTokenHash string, newExpiresAt time.Time, clientIP, userAgent, deviceName string) (RotateResult, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return RotateResult{}, err
@@ -180,7 +207,19 @@ func (r *RefreshTokenRepo) Cleanup(ctx context.Context, now time.Time) error {
 }
 
 // ListActiveSessions returns one row per active session (logical device), with metadata from the current refresh token head.
-func (r *RefreshTokenRepo) ListActiveSessions(ctx context.Context, userID uuid.UUID) ([]SessionListRow, error) {
+func (r *RefreshTokenRepo) ListActiveSessions(ctx context.Context, userID uuid.UUID) ([]domain.SessionListInfo, error) {
+	rows, err := r.listActiveSessions(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.SessionListInfo, len(rows))
+	for i, row := range rows {
+		out[i] = sessionListRowToInfo(row)
+	}
+	return out, nil
+}
+
+func (r *RefreshTokenRepo) listActiveSessions(ctx context.Context, userID uuid.UUID) ([]SessionListRow, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT DISTINCT ON (rt.session_id)
 			rt.session_id,
@@ -212,4 +251,34 @@ func (r *RefreshTokenRepo) ListActiveSessions(ctx context.Context, userID uuid.U
 		out = append(out, s)
 	}
 	return out, rows.Err()
+}
+
+func dtoToRefreshToken(dto RefreshTokenDTO) domain.RefreshToken {
+	return domain.RefreshToken{
+		ID:            dto.ID,
+		UserID:        dto.UserID,
+		SessionID:     dto.SessionID,
+		TokenHash:     dto.TokenHash,
+		ExpiresAt:     dto.ExpiresAt,
+		RevokedAt:     dto.RevokedAt,
+		RevokedReason: dto.RevokedReason,
+		CreatedAt:     dto.CreatedAt,
+		IPAddress:     dto.IPAddress,
+		UserAgent:     dto.UserAgent,
+		DeviceName:    dto.DeviceName,
+		LastUsedAt:    dto.LastUsedAt,
+	}
+}
+
+func sessionListRowToInfo(row SessionListRow) domain.SessionListInfo {
+	return domain.SessionListInfo{
+		SessionID:  row.SessionID,
+		RefreshID:  row.RefreshID,
+		CreatedAt:  row.CreatedAt,
+		LastUsedAt: row.LastUsedAt,
+		IPAddress:  row.IPAddress,
+		UserAgent:  row.UserAgent,
+		ExpiresAt:  row.ExpiresAt,
+		DeviceName: row.DeviceName,
+	}
 }

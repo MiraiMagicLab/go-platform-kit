@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	httpmw "github.com/MiraiMagicLab/go-platform-kit/auth/internal/gin/middleware"
+	httpmw "github.com/MiraiMagicLab/go-platform-kit/auth/internal/http/middleware"
 )
 
 // MountOptions provides fine-grained control over which endpoints are mounted.
@@ -94,6 +94,7 @@ func DefaultMountOptions() MountOptions {
 	}
 }
 
+// MountCommon attaches request ID, access log, and CORS middleware shared by all auth routes.
 func (m *Module) MountCommon(r gin.IRouter) {
 	if m.commonMounted {
 		return
@@ -104,6 +105,7 @@ func (m *Module) MountCommon(r gin.IRouter) {
 	m.commonMounted = true
 }
 
+// MountAuth registers register, login, refresh, logout, me, and session routes.
 func (m *Module) MountAuth(r gin.IRouter) {
 	loginLimit := httpmw.SensitiveRateLimit(m.redis, m.memLimiter, "rl:login", m.cfg.RateLimitLoginPerMinute, time.Minute)
 	refreshLimit := httpmw.SensitiveRateLimit(m.redis, m.memLimiter, "rl:refresh", m.cfg.RateLimitRefreshPerMinute, time.Minute)
@@ -123,6 +125,7 @@ func (m *Module) MountAuth(r gin.IRouter) {
 	}
 }
 
+// MountEmail registers password reset and email verification routes.
 func (m *Module) MountEmail(r gin.IRouter) {
 	forgotLimit := httpmw.SensitiveRateLimit(m.redis, m.memLimiter, "rl:forgot", m.cfg.RateLimitForgotPerMinute, time.Minute)
 	resetLimit := httpmw.SensitiveRateLimit(m.redis, m.memLimiter, "rl:reset_password", m.cfg.RateLimitPasswordResetPerMinute, time.Minute)
@@ -136,6 +139,7 @@ func (m *Module) MountEmail(r gin.IRouter) {
 	me.POST("/email/verify/request", m.authH.RequestVerifyEmail)
 }
 
+// MountMFA registers TOTP setup, enable, and disable routes (authenticated).
 func (m *Module) MountMFA(r gin.IRouter) {
 	me := r.Group("/")
 	me.Use(m.authMW)
@@ -144,11 +148,13 @@ func (m *Module) MountMFA(r gin.IRouter) {
 	me.POST("/mfa/disable", m.mfaH.Disable)
 }
 
+// MountOAuth registers Google/Facebook OAuth login and callback routes.
 func (m *Module) MountOAuth(r gin.IRouter) {
 	r.GET("/oauth/:provider/login", m.oauthH.Login)
 	r.GET("/oauth/:provider/callback", m.oauthH.Callback)
 }
 
+// MountRBAC registers RBAC admin routes (requires RBAC admin permission).
 func (m *Module) MountRBAC(r gin.IRouter) {
 	rbac := r.Group("/")
 	rbac.Use(m.authMW)
@@ -163,6 +169,7 @@ func (m *Module) MountRBAC(r gin.IRouter) {
 	rbac.GET("/users", m.rbacH.ListUsers)
 }
 
+// MountAll registers every auth endpoint group with default options.
 func (m *Module) MountAll(r gin.IRouter) {
 	m.MountCommon(r)
 	m.MountAuth(r)
@@ -172,6 +179,7 @@ func (m *Module) MountAll(r gin.IRouter) {
 	m.MountRBAC(r)
 }
 
+// MountWithOptions registers selected endpoint groups.
 func (m *Module) MountWithOptions(r gin.IRouter, opt MountOptions) {
 	if opt.Common {
 		m.MountCommon(r)

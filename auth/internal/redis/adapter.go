@@ -3,18 +3,18 @@ package redis
 import (
 	"context"
 	"encoding/json"
-	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/store"
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/ports"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 )
 
 var (
-	_ store.StringSliceCache    = (*StringSliceCache)(nil)
-	_ store.AccessTokenDenylist = (*AccessTokenDenylist)(nil)
+	_ ports.StringSliceCache    = (*StringSliceCache)(nil)
+	_ ports.AccessTokenDenylist = (*AccessTokenDenylist)(nil)
 )
 
-// StringSliceCache implements store.StringSliceCache using go-redis.
+// StringSliceCache implements ports.StringSliceCache using go-redis.
 type StringSliceCache struct {
 	rdb *redis.Client
 }
@@ -59,7 +59,7 @@ func (c *StringSliceCache) Del(ctx context.Context, key string) error {
 	return c.rdb.Del(ctx, key).Err()
 }
 
-// AccessTokenDenylist implements store.AccessTokenDenylist using go-redis.
+// AccessTokenDenylist implements ports.AccessTokenDenylist using go-redis.
 type AccessTokenDenylist struct {
 	rdb *redis.Client
 }

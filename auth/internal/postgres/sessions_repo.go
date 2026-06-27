@@ -7,7 +7,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/domain"
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/ports"
 )
+
+var _ ports.SessionRepository = (*SessionsRepo)(nil)
 
 // SessionsRepo provides PostgreSQL-backed persistence for user login sessions.
 type SessionsRepo struct {
@@ -41,7 +46,19 @@ func (r *SessionsRepo) CreateWithID(ctx context.Context, id, userID uuid.UUID, d
 }
 
 // ListActive returns all non-revoked sessions for the given user that were active within the last 30 days.
-func (r *SessionsRepo) ListActive(ctx context.Context, userID uuid.UUID) ([]SessionRow, error) {
+func (r *SessionsRepo) ListActive(ctx context.Context, userID uuid.UUID) ([]domain.Session, error) {
+	rows, err := r.listActive(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.Session, len(rows))
+	for i, row := range rows {
+		out[i] = dtoToSession(row)
+	}
+	return out, nil
+}
+
+func (r *SessionsRepo) listActive(ctx context.Context, userID uuid.UUID) ([]SessionRow, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT id, user_id, device_name, ip_address, user_agent, created_at, last_seen_at, revoked_at
 		FROM sessions
@@ -102,8 +119,16 @@ func (r *SessionsRepo) RevokeAllExcept(ctx context.Context, userID, keepSessionI
 	return tag.RowsAffected(), err
 }
 
-// GetByID returns the session with the given ID. If no session exists, it returns a zero-value SessionRow and nil error.
-func (r *SessionsRepo) GetByID(ctx context.Context, sessionID uuid.UUID) (SessionRow, error) {
+// GetByID returns the session with the given ID. If no session exists, it returns a zero-value Session and nil error.
+func (r *SessionsRepo) GetByID(ctx context.Context, sessionID uuid.UUID) (domain.Session, error) {
+	row, err := r.getByID(ctx, sessionID)
+	if err != nil {
+		return domain.Session{}, err
+	}
+	return dtoToSession(row), nil
+}
+
+func (r *SessionsRepo) getByID(ctx context.Context, sessionID uuid.UUID) (SessionRow, error) {
 	var s SessionRow
 	err := r.db.QueryRow(ctx, `
 		SELECT id, user_id, device_name, ip_address, user_agent, created_at, last_seen_at, revoked_at
@@ -136,4 +161,17 @@ func (r *SessionsRepo) Cleanup(ctx context.Context, now time.Time) error {
 		  AND revoked_at < $1 - INTERVAL '30 days'
 	`, now)
 	return err
+}
+
+func dtoToSession(row SessionRow) domain.Session {
+	return domain.Session{
+		ID:         row.ID,
+		UserID:     row.UserID,
+		DeviceName: row.DeviceName,
+		IPAddress:  row.IPAddress,
+		UserAgent:  row.UserAgent,
+		CreatedAt:  row.CreatedAt,
+		LastSeenAt: row.LastSeenAt,
+		RevokedAt:  row.RevokedAt,
+	}
 }

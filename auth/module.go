@@ -14,30 +14,31 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 
-	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/crypto"
-	ginhandlers "github.com/MiraiMagicLab/go-platform-kit/auth/internal/gin"
-	httpmw "github.com/MiraiMagicLab/go-platform-kit/auth/internal/gin/middleware"
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/http/handler"
+	httpmw "github.com/MiraiMagicLab/go-platform-kit/auth/internal/http/middleware"
 	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/postgres"
 	redisstore "github.com/MiraiMagicLab/go-platform-kit/auth/internal/redis"
-	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/service/admin"
-	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/service/audit"
-	authsvc "github.com/MiraiMagicLab/go-platform-kit/auth/internal/service/auth"
-	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/service/cleanup"
-	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/service/email"
-	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/service/mfa"
-	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/service/oauth"
-	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/service/rbac"
-	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/service/session"
-	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/smtp"
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/security"
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/usecase/admin"
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/usecase/audit"
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/usecase/cleanup"
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/usecase/email"
+	login "github.com/MiraiMagicLab/go-platform-kit/auth/internal/usecase/login"
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/usecase/mfa"
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/usecase/oauth"
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/usecase/rbac"
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/usecase/session"
+	"github.com/MiraiMagicLab/go-platform-kit/platform/log"
+	"github.com/MiraiMagicLab/go-platform-kit/platform/mail"
 )
 
 // Module wires auth HTTP handlers, services, and middleware for embedding in a Gin app.
 type Module struct {
-	authH         *ginhandlers.AuthHandler
-	sessionH      *ginhandlers.SessionHandler
-	rbacH         *ginhandlers.RBACHandler
-	mfaH          *ginhandlers.MFAHandler
-	oauthH        *ginhandlers.OAuthHandler
+	authH         *handler.AuthHandler
+	sessionH      *handler.SessionHandler
+	rbacH         *handler.RBACHandler
+	mfaH          *handler.MFAHandler
+	oauthH        *handler.OAuthHandler
 	authMW        gin.HandlerFunc
 	teamTokenMW   gin.HandlerFunc
 	rbacSvc       *rbac.RBACService
@@ -52,20 +53,22 @@ type Module struct {
 // AuthMiddleware validates JWT access tokens for host application routes.
 func (m *Module) AuthMiddleware() gin.HandlerFunc { return m.authMW }
 
-func (m *Module) TeamTokenMiddleware() gin.HandlerFunc { return m.teamTokenMW }
-
+// RequirePermission returns middleware that checks a single RBAC permission.
 func (m *Module) RequirePermission(permission string) gin.HandlerFunc {
 	return httpmw.RequirePermission(m.rbacSvc, permission, m.cfg.AdminBypassPermission)
 }
 
+// RequirePermissionNoBypass returns middleware that checks a permission without admin bypass.
 func (m *Module) RequirePermissionNoBypass(permission string) gin.HandlerFunc {
 	return httpmw.RequirePermission(m.rbacSvc, permission, false)
 }
 
+// RequireRBACAdmin returns middleware that requires the configured RBAC admin permission.
 func (m *Module) RequireRBACAdmin() gin.HandlerFunc {
 	return httpmw.RequirePermission(m.rbacSvc, m.cfg.RBACAdminPermission, m.cfg.AdminBypassPermission)
 }
 
+// RequestVerifyEmail sends a verification email to the given user.
 func (m *Module) RequestVerifyEmail(ctx context.Context, userID uuid.UUID) error {
 	if m.emailSvc == nil {
 		return errors.New("auth: email service not configured")
@@ -73,6 +76,7 @@ func (m *Module) RequestVerifyEmail(ctx context.Context, userID uuid.UUID) error
 	return m.emailSvc.RequestVerifyEmail(ctx, userID)
 }
 
+// ListUserRoles returns role names assigned to a user.
 func (m *Module) ListUserRoles(ctx context.Context, userID uuid.UUID) ([]string, error) {
 	if m == nil || m.rbacSvc == nil {
 		return nil, errors.New("auth: rbac service not initialized")
@@ -80,19 +84,12 @@ func (m *Module) ListUserRoles(ctx context.Context, userID uuid.UUID) ([]string,
 	return m.rbacSvc.ListUserRoles(ctx, userID)
 }
 
+// ListUserPermissions returns effective permission names for a user.
 func (m *Module) ListUserPermissions(ctx context.Context, userID uuid.UUID) ([]string, error) {
 	if m == nil || m.rbacSvc == nil {
 		return nil, errors.New("auth: rbac service not initialized")
 	}
 	return m.rbacSvc.ListUserPermissions(ctx, userID)
-}
-
-func UserIDFromCtx(c *gin.Context) (uuid.UUID, bool) { return httpmw.UserIDFromCtx(c) }
-
-func SessionIDFromCtx(c *gin.Context) uuid.UUID { return httpmw.SessionIDFromCtx(c) }
-
-func AccessTokenMetaFromCtx(c *gin.Context) (string, time.Time, bool) {
-	return httpmw.AccessTokenMetaFromCtx(c)
 }
 
 // New creates a Module from functional options.
@@ -114,19 +111,15 @@ func New(ctx context.Context, opts ...Option) (*Module, error) {
 		return nil, err
 	}
 
+	logger := o.logger
+	if logger == nil {
+		logger = log.Noop{}
+	}
+	httpmw.SetLogger(logger)
+
 	store := o.store
 	if store == nil {
-		repos := postgres.NewRepos(o.pg)
-		s := Store{
-			Users:        postgres.NewUserAdapter(repos.User),
-			RefreshToken: postgres.NewRefreshTokenAdapter(repos.RefreshToken),
-			Sessions:     postgres.NewSessionAdapter(repos.Sessions),
-			RBAC:         postgres.NewRBACAdapter(repos.RBAC),
-			Identity:     postgres.NewIdentityAdapter(repos.Identity),
-			MFA:          postgres.NewMFAAdapter(repos.MFA),
-			Audit:        postgres.NewAuditAdapter(repos.Audit),
-			EmailToken:   postgres.NewEmailTokenAdapter(repos.EmailToken),
-		}
+		s := postgres.NewStore(o.pg)
 		store = &s
 	}
 
@@ -162,7 +155,7 @@ func New(ctx context.Context, opts ...Option) (*Module, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid DataEncryptionKeyB64: %w", err)
 		}
-		c, err := crypto.NewStringCipher(key)
+		c, err := security.NewStringCipher(key)
 		if err != nil {
 			return nil, err
 		}
@@ -177,7 +170,17 @@ func New(ctx context.Context, opts ...Option) (*Module, error) {
 
 	sender := o.emailSender
 	if sender == nil && o.cfg.SMTPHost != "" && o.cfg.SMTPUser != "" && o.cfg.SMTPPass != "" && o.cfg.SMTPFrom != "" {
-		sender = smtp.NewSender(o.cfg.SMTPHost, o.cfg.SMTPPort, o.cfg.SMTPUser, o.cfg.SMTPPass, o.cfg.SMTPFrom)
+		var err error
+		sender, err = mail.Open(mail.Config{
+			Host: o.cfg.SMTPHost,
+			Port: o.cfg.SMTPPort,
+			User: o.cfg.SMTPUser,
+			Pass: o.cfg.SMTPPass,
+			From: o.cfg.SMTPFrom,
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 	emailSvc := email.NewEmailService(store.Users, store.EmailToken, store.RefreshToken, sender, o.cfg.PublicBaseURL, o.cfg.ResetPasswordDelivery, email.Hooks{
 		BuildVerifyEmailLink:   o.cfg.Hooks.BuildVerifyEmailLink,
@@ -186,7 +189,7 @@ func New(ctx context.Context, opts ...Option) (*Module, error) {
 		RenderResetPassword:    o.cfg.Hooks.RenderResetPassword,
 	})
 
-	authCfg := authsvc.Config{
+	authCfg := login.Config{
 		AccessTokenTTL:         o.cfg.AccessTokenTTL,
 		RefreshTokenTTL:        o.cfg.RefreshTokenTTL,
 		Issuer:                 o.cfg.Issuer,
@@ -194,7 +197,7 @@ func New(ctx context.Context, opts ...Option) (*Module, error) {
 		MaxFailedLoginAttempts: o.cfg.MaxFailedLoginAttempts,
 		AccountLockDuration:    o.cfg.AccountLockDuration,
 	}
-	authService := authsvc.NewAuthService(store.Users, store.RefreshToken, store.MFA, mfaSvc, denylist, jwtm, authCfg)
+	authService := login.NewAuthService(store.Users, store.RefreshToken, store.MFA, mfaSvc, denylist, jwtm, authCfg)
 
 	var googleCfg *oauth2.Config
 	if o.cfg.GoogleClientID != "" && o.cfg.GoogleClientSecret != "" && o.cfg.GoogleRedirectURL != "" {
@@ -223,7 +226,7 @@ func New(ctx context.Context, opts ...Option) (*Module, error) {
 
 	esvc := emailSvc
 	sessionHook := o.cfg.Hooks.AfterSessionIssued
-	authLC := &ginhandlers.Lifecycle{
+	authLC := &handler.Lifecycle{
 		AfterSessionIssued: func(c *gin.Context, reason string, userID string, emailAddr *string, ip, ua string) {
 			if sessionHook != nil {
 				uid, _ := uuid.Parse(userID)
@@ -236,16 +239,16 @@ func New(ctx context.Context, opts ...Option) (*Module, error) {
 		},
 	}
 
-	var emailValidate ginhandlers.EmailValidator
+	var emailValidate handler.EmailValidator
 	if o.cfg.EmailValidator != nil {
-		emailValidate = ginhandlers.EmailValidator(o.cfg.EmailValidator)
+		emailValidate = handler.EmailValidator(o.cfg.EmailValidator)
 	}
-	authH := ginhandlers.NewAuthHandler(authService, emailSvc, rbacSvc, store.Users, auditSvc, authLC, emailValidate)
+	authH := handler.NewAuthHandler(authService, emailSvc, rbacSvc, store.Users, auditSvc, authLC, emailValidate)
 	sessionSvc := session.NewSessionService(store.Sessions, store.RefreshToken, denylist)
-	sessionH := ginhandlers.NewSessionHandler(sessionSvc, auditSvc)
-	rbacH := ginhandlers.NewRBACHandler(rbacSvc, userAdminSvc, auditSvc)
-	mfaH := ginhandlers.NewMFAHandler(mfaSvc, auditSvc, store.Users)
-	oauthH := ginhandlers.NewOAuthHandler(oauthService, authService, "/auth", o.cfg.FrontendBaseURL, o.cfg.OAuthCookieSecure, authLC)
+	sessionH := handler.NewSessionHandler(sessionSvc, auditSvc)
+	rbacH := handler.NewRBACHandler(rbacSvc, userAdminSvc, auditSvc)
+	mfaH := handler.NewMFAHandler(mfaSvc, auditSvc, store.Users)
+	oauthH := handler.NewOAuthHandler(oauthService, authService, "/auth", o.cfg.FrontendBaseURL, o.cfg.OAuthCookieSecure, authLC)
 
 	authMW := httpmw.JWTAuth(jwtm, store.Users, denylist)
 

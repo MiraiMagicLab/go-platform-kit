@@ -58,14 +58,28 @@ go run ./examples/full-stack
 
 ## Migrations
 
+Baseline schema v1.0 — single migration for new installs:
+
 ```bash
 DATABASE_URL=postgres://... go run ./cmd/migrate
 ```
+
+Or apply directly:
+
+```bash
+psql $DATABASE_URL -f sql/schema.sql
+```
+
+Files:
+- `migrations/0001_baseline.up.sql` — apply schema
+- `migrations/0001_baseline.down.sql` — rollback
+- `sql/schema.sql` — canonical reference copy
 
 ## Testing
 
 ```bash
 go test ./...
+go test -tags=integration ./auth/integration/...
 go vet ./...
 ```
 

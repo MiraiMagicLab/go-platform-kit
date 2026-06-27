@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/util"
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/validate"
 )
 
 // Config holds all configuration for the auth module.
@@ -68,7 +68,7 @@ type Config struct {
 
 	OAuthCookieSecure bool
 
-	EmailValidator util.EmailValidator
+	EmailValidator validate.EmailValidator
 }
 
 // DefaultConfig returns a Config with sensible defaults.

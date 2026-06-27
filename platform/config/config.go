@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/MiraiMagicLab/go-platform-kit/platform/mail"
 	"github.com/MiraiMagicLab/go-platform-kit/platform/postgres"
 	"github.com/MiraiMagicLab/go-platform-kit/platform/redis"
 	"github.com/MiraiMagicLab/go-platform-kit/platform/storage"
@@ -16,6 +17,7 @@ type Infra struct {
 	Postgres postgres.Config
 	Redis    redis.Config
 	Storage  storage.Config
+	Mail     mail.Config
 }
 
 // Auth holds cross-cutting auth secrets commonly loaded from environment.
@@ -57,6 +59,13 @@ func FromEnv() Config {
 				AccessKey:  os.Getenv("R2_ACCESS_KEY"),
 				SecretKey:  os.Getenv("R2_SECRET_KEY"),
 				PublicBase: os.Getenv("STORAGE_PUBLIC_BASE"),
+			},
+			Mail: mail.Config{
+				Host: os.Getenv("SMTP_HOST"),
+				Port: ParseSMTPPort(587),
+				User: os.Getenv("SMTP_USER"),
+				Pass: os.Getenv("SMTP_PASS"),
+				From: os.Getenv("SMTP_FROM"),
 			},
 		},
 		Auth: Auth{

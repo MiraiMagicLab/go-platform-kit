@@ -8,24 +8,16 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/domain"
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/ports"
 )
+
+var _ ports.UserRepository = (*UserRepo)(nil)
 
 // UserRepo provides PostgreSQL-backed persistence for user accounts.
 type UserRepo struct {
 	db *pgxpool.Pool
-}
-
-// ListUsersFilter defines the filtering and sorting criteria for ListUsers.
-type ListUsersFilter struct {
-	Search               string
-	Email                string
-	EmailVerified        *bool
-	PasswordLoginEnabled *bool
-	IsBanned             *bool
-	CreatedFrom          *time.Time
-	CreatedTo            *time.Time
-	SortBy               string
-	SortOrder            string
 }
 
 // NewUserRepo returns a UserRepo backed by the given connection pool.
@@ -59,7 +51,25 @@ func (r *UserRepo) CreateOAuthUser(ctx context.Context, email, passwordHash stri
 
 // GetByEmail returns the user with the given email address.
 // It excludes soft-deleted users.
-func (r *UserRepo) GetByEmail(ctx context.Context, email string) (UserDTO, error) {
+func (r *UserRepo) GetByEmail(ctx context.Context, email string) (domain.User, error) {
+	dto, err := r.getByEmail(ctx, email)
+	if err != nil {
+		return domain.User{}, err
+	}
+	return dtoToUser(dto), nil
+}
+
+// GetByID returns the user with the given ID.
+// It excludes soft-deleted users.
+func (r *UserRepo) GetByID(ctx context.Context, id uuid.UUID) (domain.User, error) {
+	dto, err := r.getByID(ctx, id)
+	if err != nil {
+		return domain.User{}, err
+	}
+	return dtoToUser(dto), nil
+}
+
+func (r *UserRepo) getByEmail(ctx context.Context, email string) (UserDTO, error) {
 	var u UserDTO
 	err := r.db.QueryRow(ctx, `
 		SELECT id, email, password_hash, email_verified, password_login_enabled, banned_until, ban_reason, token_version, failed_login_count, locked_until, deleted_at, created_at, updated_at
@@ -69,9 +79,7 @@ func (r *UserRepo) GetByEmail(ctx context.Context, email string) (UserDTO, error
 	return u, err
 }
 
-// GetByID returns the user with the given ID.
-// It excludes soft-deleted users.
-func (r *UserRepo) GetByID(ctx context.Context, id uuid.UUID) (UserDTO, error) {
+func (r *UserRepo) getByID(ctx context.Context, id uuid.UUID) (UserDTO, error) {
 	var u UserDTO
 	err := r.db.QueryRow(ctx, `
 		SELECT id, email, password_hash, email_verified, password_login_enabled, banned_until, ban_reason, token_version, failed_login_count, locked_until, deleted_at, created_at, updated_at
@@ -129,7 +137,7 @@ func (r *UserRepo) SetBan(ctx context.Context, userID uuid.UUID, bannedUntil *ti
 
 // ListUsers returns a paginated, filtered list of users and the total count matching the filter.
 // Page is clamped to a minimum of 1, pageSize to [1, 100].
-func (r *UserRepo) ListUsers(ctx context.Context, page, pageSize int, f ListUsersFilter) ([]UserDTO, int, error) {
+func (r *UserRepo) ListUsers(ctx context.Context, page, pageSize int, f ports.ListUsersFilter) ([]domain.User, int, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -212,17 +220,39 @@ func (r *UserRepo) ListUsers(ctx context.Context, page, pageSize int, f ListUser
 	}
 	defer rows.Close()
 
-	var users []UserDTO
+	var dtos []UserDTO
 	for rows.Next() {
 		var u UserDTO
 		err := rows.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.EmailVerified, &u.PasswordLoginEnabled, &u.BannedUntil, &u.BanReason, &u.TokenVersion, &u.FailedLoginCount, &u.LockedUntil, &u.DeletedAt, &u.CreatedAt, &u.UpdatedAt)
 		if err != nil {
 			return nil, 0, err
 		}
-		users = append(users, u)
+		dtos = append(dtos, u)
 	}
 
+	users := make([]domain.User, len(dtos))
+	for i, dto := range dtos {
+		users[i] = dtoToUser(dto)
+	}
 	return users, total, nil
+}
+
+func dtoToUser(dto UserDTO) domain.User {
+	return domain.User{
+		ID:                   dto.ID,
+		Email:                dto.Email,
+		PasswordHash:         dto.PasswordHash,
+		EmailVerified:        dto.EmailVerified,
+		PasswordLoginEnabled: dto.PasswordLoginEnabled,
+		BannedUntil:          dto.BannedUntil,
+		BanReason:            dto.BanReason,
+		TokenVersion:         dto.TokenVersion,
+		FailedLoginCount:     dto.FailedLoginCount,
+		LockedUntil:          dto.LockedUntil,
+		DeletedAt:            dto.DeletedAt,
+		CreatedAt:            dto.CreatedAt,
+		UpdatedAt:            dto.UpdatedAt,
+	}
 }
 
 // IncrementFailedLogin atomically increments the failed login counter for the given user.

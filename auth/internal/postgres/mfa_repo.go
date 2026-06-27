@@ -7,7 +7,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/domain"
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/ports"
 )
+
+var _ ports.MFARepository = (*MFARepo)(nil)
 
 // MFARepo provides PostgreSQL-backed persistence for multi-factor authentication state.
 type MFARepo struct {
@@ -31,7 +36,18 @@ func (r *MFARepo) UpsertTOTPSecret(ctx context.Context, userID uuid.UUID, secret
 
 // GetMFA returns the MFA record for the given user.
 // If no record exists, it returns false with a nil error.
-func (r *MFARepo) GetMFA(ctx context.Context, userID uuid.UUID) (MFADTO, bool, error) {
+func (r *MFARepo) GetMFA(ctx context.Context, userID uuid.UUID) (domain.MFAConfig, bool, error) {
+	dto, ok, err := r.getMFA(ctx, userID)
+	if err != nil {
+		return domain.MFAConfig{}, false, err
+	}
+	if !ok {
+		return domain.MFAConfig{}, false, nil
+	}
+	return dtoToMFAConfig(dto), true, nil
+}
+
+func (r *MFARepo) getMFA(ctx context.Context, userID uuid.UUID) (MFADTO, bool, error) {
 	var m MFADTO
 	err := r.db.QueryRow(ctx, `
 		SELECT user_id, totp_secret, enabled, enabled_at, created_at
@@ -136,4 +152,14 @@ func (r *MFARepo) Cleanup(ctx context.Context, now time.Time) error {
 		WHERE used_at IS NOT NULL AND used_at < $1 - INTERVAL '30 days'
 	`, now)
 	return err
+}
+
+func dtoToMFAConfig(dto MFADTO) domain.MFAConfig {
+	return domain.MFAConfig{
+		UserID:     dto.UserID,
+		TOTPSecret: dto.TOTPSecret,
+		Enabled:    dto.Enabled,
+		EnabledAt:  dto.EnabledAt,
+		CreatedAt:  dto.CreatedAt,
+	}
 }

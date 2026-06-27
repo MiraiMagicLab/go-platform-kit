@@ -1,15 +1,10 @@
--- go-auth-lib v1.1 Schema
--- Cumulative schema: run this instead of individual migrations for new installs.
--- For existing installations, run migrations/0001_init.up.sql through 0011_audit_partition.up.sql in order.
---
--- NOTE: audit_logs partitioning (0011) requires pg_partman or manual partition setup.
--- For new installs, you may apply 0011 after this schema.
+-- Go Platform Kit — baseline schema v1.0
+-- Canonical reference copy. Apply via: go run ./cmd/migrate
+-- or: psql $DATABASE_URL -f sql/schema.sql
 
--- Enable UUID generation + citext for case-insensitive email.
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS citext;
 
--- USERS
 CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email CITEXT NOT NULL,
@@ -21,16 +16,13 @@ CREATE TABLE IF NOT EXISTS users (
   token_version INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  -- v1.1: account lock
   failed_login_count INT NOT NULL DEFAULT 0,
   locked_until TIMESTAMPTZ NULL,
-  -- v1.1: soft delete
   deleted_at TIMESTAMPTZ NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 
--- v1.1: updated_at trigger (also covers locked_until changes via updated_at)
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -44,21 +36,18 @@ CREATE TRIGGER trg_users_updated_at
   FOR EACH ROW
   EXECUTE FUNCTION set_updated_at();
 
--- ROLES
 CREATE TABLE IF NOT EXISTS roles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL UNIQUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- PERMISSIONS
 CREATE TABLE IF NOT EXISTS permissions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL UNIQUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- USER_ROLES (many-to-many)
 CREATE TABLE IF NOT EXISTS user_roles (
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   role_id UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
@@ -69,7 +58,6 @@ CREATE TABLE IF NOT EXISTS user_roles (
 CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON user_roles(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_roles_role_id ON user_roles(role_id);
 
--- ROLE_PERMISSIONS (many-to-many)
 CREATE TABLE IF NOT EXISTS role_permissions (
   role_id UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
   permission_id UUID NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
@@ -80,7 +68,6 @@ CREATE TABLE IF NOT EXISTS role_permissions (
 CREATE INDEX IF NOT EXISTS idx_role_permissions_role_id ON role_permissions(role_id);
 CREATE INDEX IF NOT EXISTS idx_role_permissions_permission_id ON role_permissions(permission_id);
 
--- v1.1: SESSIONS (authoritative login device entity)
 CREATE TABLE IF NOT EXISTS sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -98,7 +85,6 @@ CREATE INDEX IF NOT EXISTS idx_sessions_user_active ON sessions(user_id, revoked
 CREATE INDEX IF NOT EXISTS idx_sessions_device_name ON sessions(user_id, device_name)
   WHERE device_name IS NOT NULL;
 
--- REFRESH TOKENS (rotation + revocation)
 CREATE TABLE IF NOT EXISTS refresh_tokens (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -124,7 +110,6 @@ CREATE INDEX IF NOT EXISTS idx_refresh_tokens_session_active ON refresh_tokens(u
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_device_name ON refresh_tokens(user_id, device_name)
   WHERE device_name IS NOT NULL;
 
--- OAUTH / SOCIAL IDENTITIES
 CREATE TABLE IF NOT EXISTS user_identities (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -138,7 +123,6 @@ CREATE TABLE IF NOT EXISTS user_identities (
 
 CREATE INDEX IF NOT EXISTS idx_user_identities_user_id ON user_identities(user_id);
 
--- MFA (TOTP)
 CREATE TABLE IF NOT EXISTS user_mfa (
   user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   totp_secret TEXT NOT NULL,
@@ -157,12 +141,10 @@ CREATE TABLE IF NOT EXISTS user_mfa_recovery_codes (
 
 CREATE INDEX IF NOT EXISTS idx_user_mfa_recovery_user_id ON user_mfa_recovery_codes(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_mfa_recovery_code_hash ON user_mfa_recovery_codes(code_hash);
--- v1.1: prevent duplicate unused recovery codes
 CREATE UNIQUE INDEX IF NOT EXISTS idx_user_mfa_recovery_code_hash_uniq
   ON user_mfa_recovery_codes(code_hash)
   WHERE used_at IS NULL;
 
--- EMAIL ACTION TOKENS (verify email / reset password)
 CREATE TABLE IF NOT EXISTS email_action_tokens (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -176,13 +158,9 @@ CREATE TABLE IF NOT EXISTS email_action_tokens (
 CREATE INDEX IF NOT EXISTS idx_email_action_tokens_user_id ON email_action_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_email_action_tokens_action ON email_action_tokens(action_type);
 CREATE INDEX IF NOT EXISTS idx_email_action_tokens_expires ON email_action_tokens(expires_at);
--- v1.1: composite index for consume query pattern
 CREATE INDEX IF NOT EXISTS idx_email_action_tokens_user_action
   ON email_action_tokens(user_id, action_type);
 
--- AUDIT LOGS
--- v1.1 NOTE: For production at scale, partition by month using migration 0011_audit_partition.up.sql
--- or configure pg_partman. The flat table below is suitable for new installs or small deployments.
 CREATE TABLE IF NOT EXISTS audit_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NULL REFERENCES users(id) ON DELETE SET NULL,
@@ -198,15 +176,11 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
 
--- Seed baseline roles + permissions (idempotent)
 INSERT INTO roles (name) VALUES ('admin') ON CONFLICT (name) DO NOTHING;
 INSERT INTO roles (name) VALUES ('user') ON CONFLICT (name) DO NOTHING;
 
-INSERT INTO permissions (name) VALUES
-  ('rbac.manage')
-ON CONFLICT (name) DO NOTHING;
+INSERT INTO permissions (name) VALUES ('rbac.manage') ON CONFLICT (name) DO NOTHING;
 
--- Give admin all existing permissions
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id
 FROM roles r
@@ -214,7 +188,6 @@ JOIN permissions p ON true
 WHERE r.name = 'admin'
 ON CONFLICT DO NOTHING;
 
--- v1.1: safety net — prevent hard deletes on users
 CREATE OR REPLACE FUNCTION prevent_user_hard_delete()
 RETURNS TRIGGER AS $$
 BEGIN

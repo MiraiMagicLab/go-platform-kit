@@ -1,21 +1,14 @@
 package postgres
 
-import "github.com/jackc/pgx/v5/pgxpool"
+import (
+	"github.com/jackc/pgx/v5/pgxpool"
 
-type Repos struct {
-	User         *UserRepo
-	RefreshToken *RefreshTokenRepo
-	Sessions     *SessionsRepo
-	RBAC         *RBACRepo
-	Identity     *IdentityRepo
-	MFA          *MFARepo
-	Audit        *AuditRepo
-	EmailToken   *EmailTokenRepo
-}
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/ports"
+)
 
-func NewRepos(db *pgxpool.Pool) *Repos {
-	return &Repos{
-		User:         NewUserRepo(db),
+func NewStore(db *pgxpool.Pool) ports.Store {
+	return ports.Store{
+		Users:        NewUserRepo(db),
 		RefreshToken: NewRefreshTokenRepo(db),
 		Sessions:     NewSessionsRepo(db),
 		RBAC:         NewRBACRepo(db),

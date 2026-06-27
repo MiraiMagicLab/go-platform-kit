@@ -209,8 +209,8 @@ msg := response.DefaultMessage("M0100001") // → "Account not found" (if regist
 
 When adding a new error code to go-platform-kit:
 
-1. Add the constant to `pkg/response/codes.go` under the correct category block
-2. Add the message to `pkg/response/messages.go` in the `commonMessages` map
+1. Add the constant to `platform/httpx/codes.go` under the correct category block
+2. Add the message to `platform/httpx/messages.go` in the `commonMessages` map
 3. Follow the naming convention: `Code` + Domain + Description
 4. Use the next available sequence number in the category
 5. Run `go build ./...` and `go test ./...`

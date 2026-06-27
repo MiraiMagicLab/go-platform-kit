@@ -7,7 +7,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/ports"
 )
+
+var _ ports.EmailTokenRepository = (*EmailTokenRepo)(nil)
 
 // EmailTokenRepo provides PostgreSQL-backed persistence for single-use email action tokens
 // (e.g. email verification, password reset).

@@ -62,7 +62,7 @@ func WithLogger(logger log.Logger) Option {
 	}
 }
 
-// WithStore replaces the default PostgreSQL-backed store (useful for tests).
+// WithStore replaces the default PostgreSQL-backed [Store] (useful for tests).
 func WithStore(store Store) Option {
 	return func(o *options) error {
 		o.store = &store
@@ -70,6 +70,7 @@ func WithStore(store Store) Option {
 	}
 }
 
+// WithPermCache overrides the RBAC permission cache (defaults to [NoopStringSliceCache]).
 func WithPermCache(cache StringSliceCache) Option {
 	return func(o *options) error {
 		o.permCache = cache
@@ -77,6 +78,7 @@ func WithPermCache(cache StringSliceCache) Option {
 	}
 }
 
+// WithDenylist overrides the access-token denylist (defaults to [NoopAccessTokenDenylist]).
 func WithDenylist(denylist AccessTokenDenylist) Option {
 	return func(o *options) error {
 		o.denylist = denylist
@@ -84,6 +86,7 @@ func WithDenylist(denylist AccessTokenDenylist) Option {
 	}
 }
 
+// WithEmailSender injects a shared [platform/mail.Mailer] for verify/reset emails.
 func WithEmailSender(sender EmailSender) Option {
 	return func(o *options) error {
 		o.emailSender = sender

@@ -23,6 +23,7 @@ type RBACHandler struct {
 	auditSvc *audit.AuditService
 }
 
+// NewRBACHandler creates an RBACHandler for role, permission, and user admin endpoints.
 func NewRBACHandler(rbacSvc *rbac.RBACService, adminSvc *admin.UserAdminService, auditSvc *audit.AuditService) *RBACHandler {
 	return &RBACHandler{rbacSvc: rbacSvc, adminSvc: adminSvc, auditSvc: auditSvc}
 }

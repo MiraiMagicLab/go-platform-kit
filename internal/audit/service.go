@@ -15,6 +15,7 @@ type AuditService struct {
 	repo ports.AuditRepository
 }
 
+// NewAuditService creates an AuditService backed by the given repository.
 func NewAuditService(repo ports.AuditRepository) *AuditService {
 	return &AuditService{repo: repo}
 }

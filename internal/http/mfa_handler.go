@@ -19,6 +19,7 @@ type MFAHandler struct {
 	users    ports.UserRepository
 }
 
+// NewMFAHandler creates an MFAHandler for TOTP setup, verification, and disable endpoints.
 func NewMFAHandler(mfaSvc *mfa.MFAService, auditSvc *audit.AuditService, users ports.UserRepository) *MFAHandler {
 	return &MFAHandler{mfaSvc: mfaSvc, auditSvc: auditSvc, users: users}
 }

@@ -18,6 +18,7 @@ type SessionHandler struct {
 	auditSvc   *audit.AuditService
 }
 
+// NewSessionHandler creates a SessionHandler for managing user sessions.
 func NewSessionHandler(sessionSvc *session.SessionService, auditSvc *audit.AuditService) *SessionHandler {
 	return &SessionHandler{sessionSvc: sessionSvc, auditSvc: auditSvc}
 }

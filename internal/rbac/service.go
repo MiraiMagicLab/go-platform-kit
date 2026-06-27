@@ -17,6 +17,8 @@ type RBACService struct {
 	cacheTTL time.Duration
 }
 
+// NewRBACService creates an RBACService with optional permission caching. If cache is nil,
+// a no-op cache is used. cacheTTL controls how long resolved permissions are cached.
 func NewRBACService(repo ports.RBACRepository, cache ports.StringSliceCache, cacheTTL time.Duration) *RBACService {
 	if cache == nil {
 		cache = ports.NoopStringSliceCache{}
@@ -24,14 +26,18 @@ func NewRBACService(repo ports.RBACRepository, cache ports.StringSliceCache, cac
 	return &RBACService{repo: repo, cache: cache, cacheTTL: cacheTTL}
 }
 
+// CreateRole creates a new role and returns its ID.
 func (s *RBACService) CreateRole(ctx context.Context, name string) (uuid.UUID, error) {
 	return s.repo.CreateRole(ctx, name)
 }
 
+// CreatePermission creates a new permission and returns its ID.
 func (s *RBACService) CreatePermission(ctx context.Context, name string) (uuid.UUID, error) {
 	return s.repo.CreatePermission(ctx, name)
 }
 
+// AssignPermissionsToRole replaces the role's permissions and invalidates the
+// permission cache for all users assigned to that role.
 func (s *RBACService) AssignPermissionsToRole(ctx context.Context, roleID uuid.UUID, permissionIDs []uuid.UUID) error {
 	if err := s.repo.AssignPermissionsToRole(ctx, roleID, permissionIDs); err != nil {
 		return err
@@ -46,6 +52,7 @@ func (s *RBACService) AssignPermissionsToRole(ctx context.Context, roleID uuid.U
 	return nil
 }
 
+// AssignRolesToUser replaces the user's roles and invalidates their permission cache.
 func (s *RBACService) AssignRolesToUser(ctx context.Context, userID uuid.UUID, roleIDs []uuid.UUID) error {
 	if err := s.repo.AssignRolesToUser(ctx, userID, roleIDs); err != nil {
 		return err
@@ -54,6 +61,8 @@ func (s *RBACService) AssignRolesToUser(ctx context.Context, userID uuid.UUID, r
 	return nil
 }
 
+// ListUserPermissions returns all permission strings for the user, using the cache
+// when available. Results are cached for cacheTTL on cache miss.
 func (s *RBACService) ListUserPermissions(ctx context.Context, userID uuid.UUID) ([]string, error) {
 	key := userPermCacheKey(userID)
 	if v, ok, err := s.cache.Get(ctx, key); err == nil && ok {
@@ -67,6 +76,7 @@ func (s *RBACService) ListUserPermissions(ctx context.Context, userID uuid.UUID)
 	return perms, nil
 }
 
+// ListUserRoles returns all role names assigned to the user.
 func (s *RBACService) ListUserRoles(ctx context.Context, userID uuid.UUID) ([]string, error) {
 	return s.repo.ListUserRoles(ctx, userID)
 }

@@ -1,8 +1,12 @@
 package response
 
-// ── Platform Common (PP=00) ──────────────────────────────────────────────
-
+// Platform Common error codes (PP=00). These codes are shared across all products
+// and correspond to standard HTTP error categories.
+//
+// Code format: M + 2-digit product (00) + 2-digit category (00) + 3-digit sequence.
+// See ERROR_CODE_REFERENCE.md for the complete specification.
 const (
+	// CodeUnknownError is returned when an unexpected error occurs.
 	CodeUnknownError = "M0000000"
 	CodeBadRequest   = "M0000001"
 	CodeUnauthorized = "M0000002"

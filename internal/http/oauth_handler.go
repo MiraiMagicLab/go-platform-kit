@@ -23,6 +23,7 @@ type OAuthHandler struct {
 	lifecycle    *Lifecycle
 }
 
+// NewOAuthHandler creates an OAuthHandler for Google and Facebook OAuth2 login flows.
 func NewOAuthHandler(
 	oauthSvc *oauthSvc.OAuthService,
 	authSvc *auth.AuthService,

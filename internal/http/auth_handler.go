@@ -35,6 +35,8 @@ type AuthHandler struct {
 	emailValidate EmailValidator
 }
 
+// NewAuthHandler creates an AuthHandler with the given dependencies. If emailValidate
+// is nil, a default RFC 5322 validator is used.
 func NewAuthHandler(
 	authSvc *auth.AuthService,
 	emailSvc *email.EmailService,

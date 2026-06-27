@@ -30,10 +30,13 @@ type MFAService struct {
 	cipher Cipher
 }
 
+// NewMFAService creates an MFAService. If cipher is nil, TOTP secrets are stored in plaintext.
 func NewMFAService(repo ports.MFARepository, issuer string, cipher Cipher) *MFAService {
 	return &MFAService{repo: repo, issuer: issuer, cipher: cipher}
 }
 
+// SetupTOTP generates a new TOTP secret, recovery codes, and provisioning URL for
+// the user. The secret is encrypted at rest when a cipher is configured.
 func (s *MFAService) SetupTOTP(ctx context.Context, userID uuid.UUID, accountName string) (domain.MFASetup, error) {
 	secret, err := randomBase32(20)
 	if err != nil {
@@ -68,6 +71,8 @@ func (s *MFAService) SetupTOTP(ctx context.Context, userID uuid.UUID, accountNam
 	}, nil
 }
 
+// EnableTOTP activates MFA for the user after validating the provided OTP code
+// against the previously stored TOTP secret.
 func (s *MFAService) EnableTOTP(ctx context.Context, userID uuid.UUID, otpCode string) error {
 	mfa, ok, err := s.repo.GetMFA(ctx, userID)
 	if err != nil || !ok {
@@ -87,10 +92,12 @@ func (s *MFAService) EnableTOTP(ctx context.Context, userID uuid.UUID, otpCode s
 	return s.repo.EnableMFA(ctx, userID)
 }
 
+// Disable deactivates MFA for the user.
 func (s *MFAService) Disable(ctx context.Context, userID uuid.UUID) error {
 	return s.repo.DisableMFA(ctx, userID)
 }
 
+// IsEnabled reports whether MFA is currently enabled for the user.
 func (s *MFAService) IsEnabled(ctx context.Context, userID uuid.UUID) (bool, error) {
 	mfa, ok, err := s.repo.GetMFA(ctx, userID)
 	if err != nil || !ok {
@@ -99,6 +106,8 @@ func (s *MFAService) IsEnabled(ctx context.Context, userID uuid.UUID) (bool, err
 	return mfa.Enabled, nil
 }
 
+// Verify checks an OTP code or recovery code against the user's MFA configuration.
+// It returns true if the code is valid.
 func (s *MFAService) Verify(ctx context.Context, userID uuid.UUID, otpCodeOrRecovery string) (bool, error) {
 	mfa, ok, err := s.repo.GetMFA(ctx, userID)
 	if err != nil || !ok || !mfa.Enabled {

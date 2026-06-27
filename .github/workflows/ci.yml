@@ -62,11 +62,14 @@ jobs:
         with:
           go-version: "1.25"
 
+      - name: Apply migrations
+        run: DATABASE_URL=$DATABASE_URL go run ./cmd/migrate
+
       - name: Run tests
         run: go test ./... -v -count=1 -race
 
       - name: Run integration tests
-        run: go test -tags=integration ./auth/integration/... -v -count=1
+        run: go test -tags=integration ./auth/integration/... ./auth/internal/postgres/... ./auth/internal/redis/... -v -count=1
 
       - name: Run tests with coverage
         run: go test ./... -coverprofile=coverage.out -covermode=atomic

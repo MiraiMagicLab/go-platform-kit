@@ -11,14 +11,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
 
 	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/http/handler"
 	httpmw "github.com/MiraiMagicLab/go-platform-kit/auth/internal/http/middleware"
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/ports"
 	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/postgres"
 	redisstore "github.com/MiraiMagicLab/go-platform-kit/auth/internal/redis"
 	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/security"
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/security/jwt"
 	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/usecase/admin"
 	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/usecase/audit"
 	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/usecase/cleanup"
@@ -32,68 +32,44 @@ import (
 	"github.com/MiraiMagicLab/go-platform-kit/platform/mail"
 )
 
-// Module wires auth HTTP handlers, services, and middleware for embedding in a Gin app.
-type Module struct {
+// Auth is the headless auth runtime. Open it once, then call use-case methods from host HTTP handlers.
+type Auth struct {
+	loginSvc    *login.AuthService
+	sessionSvc  *session.SessionService
+	emailSvc    *email.EmailService
+	rbacSvc     *rbac.RBACService
+	adminSvc    *admin.UserAdminService
+	mfaSvc      *mfa.MFAService
+	oauthSvc    *oauth.OAuthService
+	auditSvc    *audit.AuditService
+	cleanup     *cleanup.CleanupService
+	users       ports.UserRepository
+	authMW      gin.HandlerFunc
+	teamTokenMW gin.HandlerFunc
+	cfg          Config
+	redis        *goredis.Client
+	rateLimiter  httpmw.RedisRateLimiter
+	memLimiter   *httpmw.InMemoryRateLimiter
+
 	authH         *handler.AuthHandler
 	sessionH      *handler.SessionHandler
 	rbacH         *handler.RBACHandler
 	mfaH          *handler.MFAHandler
 	oauthH        *handler.OAuthHandler
-	authMW        gin.HandlerFunc
-	teamTokenMW   gin.HandlerFunc
-	rbacSvc       *rbac.RBACService
-	emailSvc      *email.EmailService
-	cleanup       *cleanup.CleanupService
-	redis         *goredis.Client
-	cfg           Config
-	memLimiter    *httpmw.InMemoryRateLimiter
 	commonMounted bool
 }
 
-// AuthMiddleware validates JWT access tokens for host application routes.
-func (m *Module) AuthMiddleware() gin.HandlerFunc { return m.authMW }
-
-// RequirePermission returns middleware that checks a single RBAC permission.
-func (m *Module) RequirePermission(permission string) gin.HandlerFunc {
-	return httpmw.RequirePermission(m.rbacSvc, permission, m.cfg.AdminBypassPermission)
+// Open wires auth from functional options.
+func Open(ctx context.Context, opts ...Option) (*Auth, error) {
+	return newAuth(ctx, opts...)
 }
 
-// RequirePermissionNoBypass returns middleware that checks a permission without admin bypass.
-func (m *Module) RequirePermissionNoBypass(permission string) gin.HandlerFunc {
-	return httpmw.RequirePermission(m.rbacSvc, permission, false)
+// New is an alias for [Open].
+func New(ctx context.Context, opts ...Option) (*Auth, error) {
+	return Open(ctx, opts...)
 }
 
-// RequireRBACAdmin returns middleware that requires the configured RBAC admin permission.
-func (m *Module) RequireRBACAdmin() gin.HandlerFunc {
-	return httpmw.RequirePermission(m.rbacSvc, m.cfg.RBACAdminPermission, m.cfg.AdminBypassPermission)
-}
-
-// RequestVerifyEmail sends a verification email to the given user.
-func (m *Module) RequestVerifyEmail(ctx context.Context, userID uuid.UUID) error {
-	if m.emailSvc == nil {
-		return errors.New("auth: email service not configured")
-	}
-	return m.emailSvc.RequestVerifyEmail(ctx, userID)
-}
-
-// ListUserRoles returns role names assigned to a user.
-func (m *Module) ListUserRoles(ctx context.Context, userID uuid.UUID) ([]string, error) {
-	if m == nil || m.rbacSvc == nil {
-		return nil, errors.New("auth: rbac service not initialized")
-	}
-	return m.rbacSvc.ListUserRoles(ctx, userID)
-}
-
-// ListUserPermissions returns effective permission names for a user.
-func (m *Module) ListUserPermissions(ctx context.Context, userID uuid.UUID) ([]string, error) {
-	if m == nil || m.rbacSvc == nil {
-		return nil, errors.New("auth: rbac service not initialized")
-	}
-	return m.rbacSvc.ListUserPermissions(ctx, userID)
-}
-
-// New creates a Module from functional options.
-func New(ctx context.Context, opts ...Option) (*Module, error) {
+func newAuth(ctx context.Context, opts ...Option) (*Auth, error) {
 	o := &options{cfg: DefaultConfig()}
 	for _, opt := range opts {
 		if err := opt(o); err != nil {
@@ -125,24 +101,24 @@ func New(ctx context.Context, opts ...Option) (*Module, error) {
 
 	jwtm := o.jwt
 	if jwtm == nil {
-		jwtm = NewJWTManager(o.cfg.JWTAccessSecret, o.cfg.JWTRefreshSecret, o.cfg.Issuer)
+		jwtm = jwt.NewManager(o.cfg.JWTAccessSecret, o.cfg.JWTRefreshSecret, o.cfg.Issuer)
 	}
 
 	permCache := o.permCache
 	denylist := o.denylist
 	if permCache == nil {
-		permCache = NoopStringSliceCache{}
+		permCache = ports.NoopStringSliceCache{}
 	}
 	if denylist == nil {
-		denylist = NoopAccessTokenDenylist{}
+		denylist = ports.NoopAccessTokenDenylist{}
 	}
 	if o.redis != nil {
-		if _, noop := permCache.(NoopStringSliceCache); noop || o.permCache == nil {
+		if _, noop := permCache.(ports.NoopStringSliceCache); noop || o.permCache == nil {
 			if c := redisstore.NewStringSliceCache(o.redis); c != nil {
 				permCache = c
 			}
 		}
-		if _, noop := denylist.(NoopAccessTokenDenylist); noop || o.denylist == nil {
+		if _, noop := denylist.(ports.NoopAccessTokenDenylist); noop || o.denylist == nil {
 			if d := redisstore.NewAccessTokenDenylist(o.redis); d != nil {
 				denylist = d
 			}
@@ -197,32 +173,15 @@ func New(ctx context.Context, opts ...Option) (*Module, error) {
 		MaxFailedLoginAttempts: o.cfg.MaxFailedLoginAttempts,
 		AccountLockDuration:    o.cfg.AccountLockDuration,
 	}
-	authService := login.NewAuthService(store.Users, store.RefreshToken, store.MFA, mfaSvc, denylist, jwtm, authCfg)
+	authService := login.NewAuthService(store.Users, store.Sessions, store.RefreshToken, store.MFA, mfaSvc, denylist, jwtm, authCfg)
 
-	var googleCfg *oauth2.Config
-	if o.cfg.GoogleClientID != "" && o.cfg.GoogleClientSecret != "" && o.cfg.GoogleRedirectURL != "" {
-		googleCfg = &oauth2.Config{
-			ClientID:     o.cfg.GoogleClientID,
-			ClientSecret: o.cfg.GoogleClientSecret,
-			RedirectURL:  o.cfg.GoogleRedirectURL,
-			Endpoint:     google.Endpoint,
-			Scopes:       []string{"openid", "email"},
-		}
+	var googleCfg = oauth.NewGoogleOAuthConfig(o.cfg.GoogleClientID, o.cfg.GoogleClientSecret, o.cfg.GoogleRedirectURL)
+	if !o.cfg.GoogleOAuthConfigured() {
+		googleCfg = nil
+	} else if o.oauthTokenURL != "" && googleCfg != nil {
+		googleCfg.Endpoint.TokenURL = o.oauthTokenURL
 	}
-	var facebookCfg *oauth2.Config
-	if o.cfg.FacebookClientID != "" && o.cfg.FacebookClientSecret != "" && o.cfg.FacebookRedirectURL != "" {
-		facebookCfg = &oauth2.Config{
-			ClientID:     o.cfg.FacebookClientID,
-			ClientSecret: o.cfg.FacebookClientSecret,
-			RedirectURL:  o.cfg.FacebookRedirectURL,
-			Endpoint: oauth2.Endpoint{
-				AuthURL:  "https://www.facebook.com/v21.0/dialog/oauth",
-				TokenURL: "https://graph.facebook.com/v21.0/oauth/access_token",
-			},
-			Scopes: []string{"email"},
-		}
-	}
-	oauthService := oauth.NewOAuthService(store.Identity, store.Users, googleCfg, facebookCfg)
+	oauthService := oauth.NewOAuthService(store.Identity, store.Users, googleCfg, o.oauthOpts...)
 
 	esvc := emailSvc
 	sessionHook := o.cfg.Hooks.AfterSessionIssued
@@ -243,14 +202,23 @@ func New(ctx context.Context, opts ...Option) (*Module, error) {
 	if o.cfg.EmailValidator != nil {
 		emailValidate = handler.EmailValidator(o.cfg.EmailValidator)
 	}
-	authH := handler.NewAuthHandler(authService, emailSvc, rbacSvc, store.Users, auditSvc, authLC, emailValidate)
+	authH := handler.NewAuthHandler(authService, emailSvc, rbacSvc, store.Users, auditSvc, o.cfg.DefaultRegisterRole, authLC, emailValidate)
 	sessionSvc := session.NewSessionService(store.Sessions, store.RefreshToken, denylist)
 	sessionH := handler.NewSessionHandler(sessionSvc, auditSvc)
 	rbacH := handler.NewRBACHandler(rbacSvc, userAdminSvc, auditSvc)
 	mfaH := handler.NewMFAHandler(mfaSvc, auditSvc, store.Users)
-	oauthH := handler.NewOAuthHandler(oauthService, authService, "/auth", o.cfg.FrontendBaseURL, o.cfg.OAuthCookieSecure, authLC)
+	oauthH := handler.NewOAuthHandler(oauthService, authService, rbacSvc, o.cfg.DefaultRegisterRole, "/auth", o.cfg.FrontendBaseURL, o.cfg.OAuthCookieSecure, authLC)
 
-	authMW := httpmw.JWTAuth(jwtm, store.Users, denylist)
+	var userCache httpmw.UserAuthCache
+	if o.redis != nil {
+		userCache = redisstore.NewUserAuthCache(o.redis, o.cfg.JWTUserCacheTTL)
+	}
+	authMW := httpmw.JWTAuth(jwtm, store.Users, denylist, userCache)
+
+	var rateLimiter httpmw.RedisRateLimiter
+	if o.redis != nil {
+		rateLimiter = redisstore.NewRateLimiter(o.redis)
+	}
 
 	var teamTokenMW gin.HandlerFunc
 	if o.cfg.ControlPlaneJWKSURL != "" && o.cfg.ControlPlaneAudience != "" {
@@ -261,25 +229,34 @@ func New(ctx context.Context, opts ...Option) (*Module, error) {
 		teamTokenMW = v.Middleware()
 	}
 
-	return &Module{
+	return &Auth{
+		loginSvc:    authService,
+		sessionSvc:  sessionSvc,
+		emailSvc:    emailSvc,
+		rbacSvc:     rbacSvc,
+		adminSvc:    userAdminSvc,
+		mfaSvc:      mfaSvc,
+		oauthSvc:    oauthService,
+		auditSvc:    auditSvc,
+		cleanup:     cleanupSvc,
+		users:       store.Users,
+		authMW:      authMW,
+		teamTokenMW: teamTokenMW,
+		cfg:         o.cfg,
+		redis:       o.redis,
+		rateLimiter: rateLimiter,
+		memLimiter:  httpmw.NewInMemoryRateLimiter(),
 		authH:       authH,
 		sessionH:    sessionH,
 		rbacH:       rbacH,
 		mfaH:        mfaH,
 		oauthH:      oauthH,
-		authMW:      authMW,
-		teamTokenMW: teamTokenMW,
-		rbacSvc:     rbacSvc,
-		emailSvc:    emailSvc,
-		cleanup:     cleanupSvc,
-		redis:       o.redis,
-		cfg:         o.cfg,
-		memLimiter:  httpmw.NewInMemoryRateLimiter(),
 	}, nil
 }
 
-func (m *Module) StartBackgroundCleanup(ctx context.Context, interval time.Duration) {
-	if m.cleanup == nil {
+// StartCleanup runs expired token/session cleanup on a background ticker.
+func (a *Auth) StartCleanup(ctx context.Context, interval time.Duration) {
+	if a == nil || a.cleanup == nil {
 		return
 	}
 	if interval <= 0 {
@@ -293,10 +270,15 @@ func (m *Module) StartBackgroundCleanup(ctx context.Context, interval time.Durat
 			case <-ctx.Done():
 				return
 			case <-tk.C:
-				m.cleanup.RunOnce(ctx)
+				a.cleanup.RunOnce(ctx)
 			}
 		}
 	}()
+}
+
+// StartBackgroundCleanup is an alias for [Auth.StartCleanup].
+func (a *Auth) StartBackgroundCleanup(ctx context.Context, interval time.Duration) {
+	a.StartCleanup(ctx, interval)
 }
 
 func seedAuthZ(ctx context.Context, pg *pgxpool.Pool, cfg Config) error {

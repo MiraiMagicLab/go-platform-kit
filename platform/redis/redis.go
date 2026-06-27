@@ -21,10 +21,18 @@ func (c Config) IsConfigured() bool {
 	return c.URL != "" || c.Addr != ""
 }
 
-// Open creates a Redis client from cfg.
+// Validate checks required fields when Redis is configured.
+func (c Config) Validate() error {
+	if !c.IsConfigured() {
+		return errors.New("redis: not configured")
+	}
+	return nil
+}
+
+// Open creates a Redis client from cfg and verifies connectivity with Ping.
 func Open(ctx context.Context, cfg Config) (*goredis.Client, error) {
-	if !cfg.IsConfigured() {
-		return nil, errors.New("redis: not configured")
+	if err := cfg.Validate(); err != nil {
+		return nil, err
 	}
 	var opts *goredis.Options
 	if cfg.URL != "" {
@@ -54,4 +62,12 @@ func Ping(ctx context.Context, client *goredis.Client) error {
 		return errors.New("redis: client is nil")
 	}
 	return client.Ping(ctx).Err()
+}
+
+// Close closes the Redis client.
+func Close(client *goredis.Client) error {
+	if client == nil {
+		return nil
+	}
+	return client.Close()
 }

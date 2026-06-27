@@ -4,22 +4,28 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
 
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/ports"
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/security/jwt"
+	oauthuc "github.com/MiraiMagicLab/go-platform-kit/auth/internal/usecase/oauth"
 	"github.com/MiraiMagicLab/go-platform-kit/platform/log"
+	"github.com/MiraiMagicLab/go-platform-kit/platform/mail"
 )
 
-// Option configures the auth [Module] during construction.
+// Option configures [Auth] during [Open].
 type Option func(*options) error
 
 type options struct {
 	cfg         Config
 	pg          *pgxpool.Pool
 	redis       *goredis.Client
-	jwt         *JWTManager
+	jwt         *jwt.Manager
 	logger      log.Logger
-	store       *Store
-	permCache   StringSliceCache
-	denylist    AccessTokenDenylist
-	emailSender EmailSender
+	store       *ports.Store
+	permCache   ports.StringSliceCache
+	denylist    ports.AccessTokenDenylist
+	emailSender mail.Mailer
+	oauthOpts     []oauthuc.Option
+	oauthTokenURL string
 }
 
 // WithConfig sets the auth domain configuration.
@@ -47,9 +53,9 @@ func WithRedis(rdb *goredis.Client) Option {
 }
 
 // WithJWT overrides the default JWT manager constructed from config secrets.
-func WithJWT(jwt *JWTManager) Option {
+func WithJWT(jwtm *jwt.Manager) Option {
 	return func(o *options) error {
-		o.jwt = jwt
+		o.jwt = jwtm
 		return nil
 	}
 }
@@ -62,24 +68,24 @@ func WithLogger(logger log.Logger) Option {
 	}
 }
 
-// WithStore replaces the default PostgreSQL-backed [Store] (useful for tests).
-func WithStore(store Store) Option {
+// WithStore replaces the default PostgreSQL-backed store (for tests; see [auth/testkit]).
+func WithStore(store ports.Store) Option {
 	return func(o *options) error {
 		o.store = &store
 		return nil
 	}
 }
 
-// WithPermCache overrides the RBAC permission cache (defaults to [NoopStringSliceCache]).
-func WithPermCache(cache StringSliceCache) Option {
+// WithPermCache overrides the RBAC permission cache.
+func WithPermCache(cache ports.StringSliceCache) Option {
 	return func(o *options) error {
 		o.permCache = cache
 		return nil
 	}
 }
 
-// WithDenylist overrides the access-token denylist (defaults to [NoopAccessTokenDenylist]).
-func WithDenylist(denylist AccessTokenDenylist) Option {
+// WithDenylist overrides the access-token denylist.
+func WithDenylist(denylist ports.AccessTokenDenylist) Option {
 	return func(o *options) error {
 		o.denylist = denylist
 		return nil
@@ -87,9 +93,25 @@ func WithDenylist(denylist AccessTokenDenylist) Option {
 }
 
 // WithEmailSender injects a shared [platform/mail.Mailer] for verify/reset emails.
-func WithEmailSender(sender EmailSender) Option {
+func WithEmailSender(sender mail.Mailer) Option {
 	return func(o *options) error {
 		o.emailSender = sender
+		return nil
+	}
+}
+
+// WithOAuthOptions passes options to the Google OAuth service (for tests or custom HTTP client).
+func WithOAuthOptions(opts ...oauthuc.Option) Option {
+	return func(o *options) error {
+		o.oauthOpts = append(o.oauthOpts, opts...)
+		return nil
+	}
+}
+
+// WithGoogleOAuthTokenURL overrides the Google token endpoint (integration tests only).
+func WithGoogleOAuthTokenURL(url string) Option {
+	return func(o *options) error {
+		o.oauthTokenURL = url
 		return nil
 	}
 }

@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/MiraiMagicLab/go-platform-kit/platform/httpx"
 )
 
 // InMemoryRateLimiter provides in-memory rate limiting as a fallback.
@@ -53,18 +55,15 @@ type RedisRateLimiter interface {
 
 // SensitiveRateLimit returns middleware that rate-limits sensitive endpoints.
 // It tries Redis first (distributed), then falls back to in-memory.
-func SensitiveRateLimit(redisClient interface{}, mem *InMemoryRateLimiter, prefix string, limit int, window time.Duration) gin.HandlerFunc {
+func SensitiveRateLimit(redisClient RedisRateLimiter, mem *InMemoryRateLimiter, prefix string, limit int, window time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip := clientIP(c)
 		key := prefix + ":" + ip
 
-		// Try Redis first if available
-		if rc, ok := redisClient.(interface {
-			Incr(ctx *gin.Context, key string, window time.Duration) (int64, error)
-		}); ok && rc != nil {
-			count, err := rc.Incr(c, key, window)
+		if redisClient != nil {
+			count, err := redisClient.Incr(c, key, window)
 			if err == nil && count > int64(limit) {
-				c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many requests"})
+				httpx.FailCode(c, http.StatusTooManyRequests, httpx.CodeRateLimited, nil)
 				c.Abort()
 				return
 			}
@@ -74,9 +73,8 @@ func SensitiveRateLimit(redisClient interface{}, mem *InMemoryRateLimiter, prefi
 			}
 		}
 
-		// Fallback to in-memory
 		if mem != nil && !mem.Allow(key, limit, window) {
-			c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many requests"})
+			httpx.FailCode(c, http.StatusTooManyRequests, httpx.CodeRateLimited, nil)
 			c.Abort()
 			return
 		}

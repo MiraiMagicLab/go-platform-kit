@@ -25,7 +25,7 @@ lint:
 ## Format
 fmt:
 	gofmt -w -s .
-	goimports -w -local github.com/MiraiMagicLab/go-auth-lib .
+	goimports -w -local github.com/MiraiMagicLab/go-platform-kit .
 
 ## Vet
 vet:

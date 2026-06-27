@@ -74,6 +74,7 @@ type RBACRepository interface {
 	ListUserPermissions(ctx context.Context, userID uuid.UUID) ([]string, error)
 	ListUserIDsByRole(ctx context.Context, roleID uuid.UUID) ([]uuid.UUID, error)
 	ListUserRoles(ctx context.Context, userID uuid.UUID) ([]string, error)
+	GetRoleIDByName(ctx context.Context, name string) (uuid.UUID, error)
 }
 
 // MFARepository defines persistence for MFA configuration and recovery codes.

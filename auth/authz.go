@@ -12,6 +12,11 @@ const (
 )
 
 // AuthZConfig configures authorization mode for the host application.
+//
+// Mode controls [Auth.RequireAccess] behavior:
+//   - [AuthZNone]: no authorization check (pass-through)
+//   - [AuthZRole]: values are role names ([Auth.RequireRole] semantics)
+//   - [AuthZRbac]: values are permission names ([Auth.RequirePermission] semantics)
 type AuthZConfig struct {
 	Mode AuthZMode
 }

@@ -25,13 +25,14 @@ type EmailValidator func(string) bool
 
 // AuthHandler handles authentication endpoints.
 type AuthHandler struct {
-	auth          *login.AuthService
-	emailSvc      *email.EmailService
-	rbacSvc       *rbac.RBACService
-	users         ports.UserRepository
-	auditSvc      *audit.AuditService
-	lifecycle     *Lifecycle
-	emailValidate EmailValidator
+	auth                *login.AuthService
+	emailSvc            *email.EmailService
+	rbacSvc             *rbac.RBACService
+	users               ports.UserRepository
+	auditSvc            *audit.AuditService
+	defaultRegisterRole string
+	lifecycle           *Lifecycle
+	emailValidate       EmailValidator
 }
 
 // NewAuthHandler creates an AuthHandler with the given dependencies. If emailValidate
@@ -42,6 +43,7 @@ func NewAuthHandler(
 	rbacSvc *rbac.RBACService,
 	users ports.UserRepository,
 	auditSvc *audit.AuditService,
+	defaultRegisterRole string,
 	lifecycle *Lifecycle,
 	emailValidate EmailValidator,
 ) *AuthHandler {
@@ -49,13 +51,14 @@ func NewAuthHandler(
 		emailValidate = defaultEmailValidator
 	}
 	return &AuthHandler{
-		auth:          authSvc,
-		emailSvc:      emailSvc,
-		rbacSvc:       rbacSvc,
-		users:         users,
-		auditSvc:      auditSvc,
-		lifecycle:     lifecycle,
-		emailValidate: emailValidate,
+		auth:                authSvc,
+		emailSvc:            emailSvc,
+		rbacSvc:             rbacSvc,
+		users:               users,
+		auditSvc:            auditSvc,
+		defaultRegisterRole: defaultRegisterRole,
+		lifecycle:           lifecycle,
+		emailValidate:       emailValidate,
 	}
 }
 
@@ -89,6 +92,13 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeAuthRegisterFailed, nil)
 		h.auditSvc.Log(c.Request.Context(), nil, "auth.register", "failed", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"email": req.Email})
 		return
+	}
+	if h.defaultRegisterRole != "" && h.rbacSvc != nil {
+		if assignErr := h.rbacSvc.AssignRoleByName(c.Request.Context(), id, h.defaultRegisterRole); assignErr != nil {
+			middleware.SetAuthErrorCode(c, httpx.CodeAuthRegisterFailed)
+			httpx.FailCode(c, http.StatusBadRequest, httpx.CodeAuthRegisterFailed, nil)
+			return
+		}
 	}
 	h.auditSvc.Log(c.Request.Context(), &id, "auth.register", "success", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"email": req.Email})
 	emailStr := req.Email
@@ -204,7 +214,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		httpx.FailCode(c, http.StatusUnauthorized, httpx.CodeUnauthorized, nil)
 		return
 	}
-	if err := h.auth.Logout(c.Request.Context(), userID, jti, exp); err != nil {
+	if err := h.auth.Logout(c.Request.Context(), userID, middleware.SessionIDFromCtx(c), jti, exp); err != nil {
 		middleware.SetAuthErrorCode(c, httpx.CodeAuthLogoutFailed)
 		httpx.FailCode(c, http.StatusInternalServerError, httpx.CodeAuthLogoutFailed, nil)
 		return

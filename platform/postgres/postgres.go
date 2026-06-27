@@ -31,7 +31,7 @@ func (c Config) Validate() error {
 	return nil
 }
 
-// Open creates a connection pool from cfg.
+// Open creates a connection pool from cfg and verifies connectivity with Ping.
 func Open(ctx context.Context, cfg Config) (*pgxpool.Pool, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -56,6 +56,10 @@ func Open(ctx context.Context, cfg Config) (*pgxpool.Pool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("postgres: open pool: %w", err)
 	}
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("postgres: ping: %w", err)
+	}
 	return pool, nil
 }
 
@@ -65,4 +69,11 @@ func Ping(ctx context.Context, pool *pgxpool.Pool) error {
 		return errors.New("postgres: pool is nil")
 	}
 	return pool.Ping(ctx)
+}
+
+// Close closes the connection pool.
+func Close(pool *pgxpool.Pool) {
+	if pool != nil {
+		pool.Close()
+	}
 }

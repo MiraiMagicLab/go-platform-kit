@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/validate"
@@ -14,6 +15,7 @@ type Config struct {
 	AccessTokenTTL      time.Duration
 	RefreshTokenTTL     time.Duration
 	PermissionsCacheTTL time.Duration
+	JWTUserCacheTTL     time.Duration
 	Issuer              string
 
 	ControlPlaneJWKSURL  string
@@ -23,10 +25,6 @@ type Config struct {
 	GoogleClientID     string
 	GoogleClientSecret string
 	GoogleRedirectURL  string
-
-	FacebookClientID     string
-	FacebookClientSecret string
-	FacebookRedirectURL  string
 
 	PublicBaseURL   string
 	FrontendBaseURL string
@@ -68,6 +66,8 @@ type Config struct {
 
 	OAuthCookieSecure bool
 
+	DefaultRegisterRole string
+
 	EmailValidator validate.EmailValidator
 }
 
@@ -77,6 +77,7 @@ func DefaultConfig() Config {
 		AccessTokenTTL:      15 * time.Minute,
 		RefreshTokenTTL:     720 * time.Hour,
 		PermissionsCacheTTL: 30 * time.Second,
+		JWTUserCacheTTL:     30 * time.Second,
 		Issuer:              "authkit",
 		ControlPlaneIssuer:  "control-plane",
 		PublicBaseURL:       "http://localhost:8080",
@@ -92,7 +93,7 @@ func DefaultConfig() Config {
 		RateLimitForgotPerMinute:             10,
 		RateLimitPasswordResetPerMinute:      10,
 		RateLimitEmailVerifyConfirmPerMinute: 10,
-		CORSAllowedOrigins:                   []string{"*"},
+		DefaultRegisterRole:                  "user",
 		SMTPPort:                             587,
 		ResetPasswordDelivery:                "otp",
 		AuthZ:                                AuthZConfig{Mode: AuthZRbac},
@@ -138,6 +139,9 @@ func (c *Config) ApplyDefaults() {
 	if c.PermissionsCacheTTL <= 0 {
 		c.PermissionsCacheTTL = 30 * time.Second
 	}
+	if c.JWTUserCacheTTL <= 0 {
+		c.JWTUserCacheTTL = 30 * time.Second
+	}
 	if c.MaxFailedLoginAttempts <= 0 {
 		c.MaxFailedLoginAttempts = 5
 	}
@@ -157,7 +161,13 @@ func (c *Config) ApplyDefaults() {
 		c.SeedRolePermissions = map[string][]string{"admin": {"rbac.manage"}}
 	}
 	if len(c.CORSAllowedOrigins) == 0 {
-		c.CORSAllowedOrigins = []string{"*"}
+		c.CORSAllowedOrigins = nil
+	}
+	if c.DefaultRegisterRole == "" {
+		c.DefaultRegisterRole = "user"
+	}
+	if c.PublicBaseURL != "" && strings.HasPrefix(strings.ToLower(strings.TrimSpace(c.PublicBaseURL)), "https://") {
+		c.OAuthCookieSecure = true
 	}
 	if c.ControlPlaneIssuer == "" {
 		c.ControlPlaneIssuer = "control-plane"

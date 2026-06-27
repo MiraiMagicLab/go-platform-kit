@@ -3,19 +3,22 @@ package storage
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"path/filepath"
+	"strings"
 	"time"
 )
 
-// ErrNotConfigured is returned when storage is used without configuration.
-var ErrNotConfigured = errors.New("storage: not configured")
+// ErrNotConfigured is returned when R2 storage is used without required settings.
+var ErrNotConfigured = errors.New("storage: R2 not configured")
 
 // PutOptions describes optional upload metadata.
 type PutOptions struct {
 	ContentType string
 }
 
-// ObjectStore uploads and serves objects from a bucket.
+// ObjectStore uploads and serves objects from a Cloudflare R2 bucket.
 type ObjectStore interface {
 	Put(ctx context.Context, key string, body io.Reader, opts PutOptions) error
 	Delete(ctx context.Context, key string) error
@@ -23,49 +26,46 @@ type ObjectStore interface {
 	SignedURL(ctx context.Context, key string, expiry time.Duration) (string, error)
 }
 
-// Config describes object storage connection settings.
+// Config describes Cloudflare R2 connection settings.
 type Config struct {
-	Provider   string // "r2", "s3", "local"
-	Bucket     string
 	AccountID  string
+	Bucket     string
 	AccessKey  string
 	SecretKey  string
 	PublicBase string
+	Endpoint   string
 }
 
-// IsConfigured reports whether enough settings exist to open a store.
+// IsConfigured reports whether required R2 settings are present.
 func (c Config) IsConfigured() bool {
-	return c.Provider != "" && c.Bucket != ""
+	return c.Bucket != "" && c.AccessKey != "" && c.SecretKey != "" && (c.AccountID != "" || c.Endpoint != "")
 }
 
-// Open returns an ObjectStore for cfg. R2/S3 providers will be implemented in a
-// follow-up change; local/noop is returned for now when not configured.
+// Validate checks required R2 fields.
+func (c Config) Validate() error {
+	if !c.IsConfigured() {
+		return ErrNotConfigured
+	}
+	return nil
+}
+
+// Open returns an R2-backed [ObjectStore].
 func Open(ctx context.Context, cfg Config) (ObjectStore, error) {
-	if !cfg.IsConfigured() {
-		return nil, ErrNotConfigured
+	if err := cfg.Validate(); err != nil {
+		return nil, err
 	}
-	return &noopStore{publicBase: cfg.PublicBase}, nil
+	return openR2(ctx, cfg)
 }
 
-type noopStore struct {
-	publicBase string
-}
-
-func (n *noopStore) Put(ctx context.Context, key string, body io.Reader, opts PutOptions) error {
-	return ErrNotConfigured
-}
-
-func (n *noopStore) Delete(ctx context.Context, key string) error {
-	return ErrNotConfigured
-}
-
-func (n *noopStore) URL(key string) string {
-	if n.publicBase == "" {
-		return key
+func normalizeKey(key string) (string, error) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return "", fmt.Errorf("storage: key is required")
 	}
-	return n.publicBase + "/" + key
-}
-
-func (n *noopStore) SignedURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
-	return "", ErrNotConfigured
+	key = strings.TrimPrefix(key, "/")
+	key = filepath.Clean(key)
+	if key == "." || strings.HasPrefix(key, "..") {
+		return "", fmt.Errorf("storage: invalid key %q", key)
+	}
+	return filepath.ToSlash(key), nil
 }

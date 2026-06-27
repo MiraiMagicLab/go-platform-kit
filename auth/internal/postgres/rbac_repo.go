@@ -154,3 +154,10 @@ func (r *RBACRepo) ListUserRoles(ctx context.Context, userID uuid.UUID) ([]strin
 	}
 	return out, rows.Err()
 }
+
+// GetRoleIDByName returns the role ID for the given unique role name.
+func (r *RBACRepo) GetRoleIDByName(ctx context.Context, name string) (uuid.UUID, error) {
+	var id uuid.UUID
+	err := r.db.QueryRow(ctx, `SELECT id FROM roles WHERE name = $1`, name).Scan(&id)
+	return id, err
+}

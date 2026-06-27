@@ -50,8 +50,9 @@ Capability (auth, admin, ...)
 | `platform/config` | Infra config loader; opt-in `FromEnv()` |
 | `platform/postgres` | Open and ping shared pools |
 | `platform/redis` | Open and ping shared clients |
-| `platform/storage` | ObjectStore interface for uploads |
-| `platform/mail` | Mailer interface + SMTP sender |
+| `platform/storage` | Cloudflare R2 ObjectStore |
+| `platform/mail` | Mailer interface + SMTP sender (STARTTLS, context timeout) |
+| `platform/health` | Health check helpers for Postgres and Redis |
 
 Capabilities receive **opened** clients/pools from the host. They do not read environment variables directly.
 
@@ -92,29 +93,39 @@ upload.New(ctx,
 
 ## Auth capability
 
-### Public surface
+### Public surface (headless)
 
 | File | Purpose |
 |------|---------|
-| `module.go` | `New`, `Module` wiring |
+| `open.go` | `Open`, `Auth` wiring |
+| `api.go` | Use-case methods: `Login`, `Register`, `Refresh`, RBAC, MFA, … |
 | `option.go` | Functional options |
 | `config.go` | Domain configuration |
-| `mount.go` | Route mounting |
-| `middleware.go` | JWT, RBAC, team-token helpers |
-| `domain.go` | Types and errors |
-| `ports.go` | Repository interfaces for tests |
-| `token.go` | JWT manager |
+| `middleware.go` | `JWTAuth`, RBAC, team-token helpers |
+| `errors.go` | `MapError`, `WriteError` for host handlers |
+| `domain.go` | Minimal DTOs and errors |
+| `mount_ref.go` | Reference routes (prefer host handlers) |
+| `auth/gin` | Optional `MountAll` wrapper for prototypes |
 
-Entry point:
+Entry point — host owns HTTP:
 
 ```go
-mod, _ := auth.New(ctx,
+a, _ := auth.Open(ctx,
     auth.WithConfig(cfg),
     auth.WithPostgres(pg),
     auth.WithRedis(rdb),
 )
-mod.MountAll(r.Group("/auth"))
+
+r.POST("/v1/sign-in", func(c *gin.Context) {
+    res, err := a.Login(ctx, email, password, auth.ClientMeta{IP: ip, UA: ua})
+    if auth.WriteError(c, err, httpx.CodeAuthInvalidCredentials, 401) { return }
+    httpx.Success(c, 200, "success", res, nil)
+})
+
+api.Use(a.JWTAuth())
 ```
+
+Optional reference routes: `authgin.MountAll(a, r)` from `auth/gin`.
 
 ### Internal layout
 
@@ -129,7 +140,7 @@ auth/internal/
     session/    # session list/revoke
     rbac/       # roles and permissions
     mfa/        # TOTP
-    oauth/      # Google/Facebook
+    oauth/      # Google OAuth2
     email/      # verify/reset flows
     admin/      # user admin (ban, list)
     audit/      # audit log writes
@@ -161,6 +172,9 @@ Schema: `migrations/0001_baseline.up.sql`, applied via `cmd/migrate`.
 |------------|--------|
 | auth | Implemented |
 | admin | Implemented |
-| platform/storage R2 | Interface stub |
+| platform/storage R2 | Implemented (Cloudflare R2 only) |
+| auth unit tests | login, MFA, Google OAuth, RBAC, session, email, admin, cleanup, middleware, handler |
+| auth integration tests | register, login/logout, refresh, MFA, RBAC, Google OAuth (Postgres + mock Google) |
+| postgres/redis integration | user/identity repos, JWT user cache (CI with DATABASE_URL + REDIS_URL) |
 | upload / media | Planned |
 | notify | Planned |

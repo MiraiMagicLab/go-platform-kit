@@ -70,6 +70,18 @@ func (s *RBACService) ListUserRoles(ctx context.Context, userID uuid.UUID) ([]st
 	return s.repo.ListUserRoles(ctx, userID)
 }
 
+// AssignRoleByName assigns a single role to a user by role name.
+func (s *RBACService) AssignRoleByName(ctx context.Context, userID uuid.UUID, roleName string) error {
+	if roleName == "" {
+		return nil
+	}
+	roleID, err := s.repo.GetRoleIDByName(ctx, roleName)
+	if err != nil {
+		return err
+	}
+	return s.AssignRolesToUser(ctx, userID, []uuid.UUID{roleID})
+}
+
 func userPermCacheKey(userID uuid.UUID) string {
 	return fmt.Sprintf("perm:user:%s", userID.String())
 }

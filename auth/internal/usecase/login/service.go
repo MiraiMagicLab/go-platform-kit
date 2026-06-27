@@ -4,14 +4,15 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/domain"
-	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/ports"
-	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/security/jwt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/domain"
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/ports"
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/security/jwt"
 )
 
 // MFAVerifier verifies TOTP codes or recovery codes.
@@ -44,6 +45,7 @@ func DefaultConfig() Config {
 // AuthService handles authentication: register, login, refresh, logout, MFA.
 type AuthService struct {
 	users       ports.UserRepository
+	sessions    ports.SessionRepository
 	refreshRepo ports.RefreshTokenRepository
 	mfaRepo     ports.MFARepository
 	mfaVerifier MFAVerifier
@@ -64,6 +66,7 @@ type LoginResult struct {
 // NewAuthService creates a new AuthService with the given dependencies.
 func NewAuthService(
 	users ports.UserRepository,
+	sessions ports.SessionRepository,
 	refreshRepo ports.RefreshTokenRepository,
 	mfaRepo ports.MFARepository,
 	mfaVerifier MFAVerifier,
@@ -82,6 +85,7 @@ func NewAuthService(
 	}
 	return &AuthService{
 		users:       users,
+		sessions:    sessions,
 		refreshRepo: refreshRepo,
 		mfaRepo:     mfaRepo,
 		mfaVerifier: mfaVerifier,
@@ -153,7 +157,6 @@ func (s *AuthService) StartSession(ctx context.Context, userID uuid.UUID, meta d
 		return LoginResult{}, domain.ErrEmailNotVerified{}
 	}
 
-	// If MFA is enabled, return MFA challenge token instead of access/refresh.
 	if s.mfaRepo != nil {
 		m, ok, err := s.mfaRepo.GetMFA(ctx, u.ID)
 		if err == nil && ok && m.Enabled {
@@ -169,27 +172,7 @@ func (s *AuthService) StartSession(ctx context.Context, userID uuid.UUID, meta d
 		}
 	}
 
-	sessionID := uuid.New()
-
-	access, _, err := s.jwt.NewAccessToken(u.ID, u.TokenVersion, sessionID, s.cfg.AccessTokenTTL)
-	if err != nil {
-		return LoginResult{}, err
-	}
-	refresh, _, err := s.jwt.NewRefreshToken(u.ID, u.TokenVersion, sessionID, s.cfg.RefreshTokenTTL)
-	if err != nil {
-		return LoginResult{}, err
-	}
-
-	hash := HashToken(refresh)
-	if _, err := s.refreshRepo.Create(ctx, u.ID, sessionID, hash, time.Now().Add(s.cfg.RefreshTokenTTL), meta.IP, meta.UA, deviceName); err != nil {
-		return LoginResult{}, err
-	}
-
-	return LoginResult{
-		UserID:       u.ID,
-		AccessToken:  access,
-		RefreshToken: refresh,
-	}, nil
+	return s.issueSessionTokens(ctx, u, meta, deviceName)
 }
 
 // CompleteMFA verifies an MFA token and OTP code, then issues real tokens.
@@ -225,7 +208,37 @@ func (s *AuthService) CompleteMFA(ctx context.Context, mfaToken string, otpOrRec
 		return LoginResult{}, domain.ErrInvalidCredentials
 	}
 
-	return s.StartSession(ctx, userID, meta, "")
+	return s.issueSessionTokens(ctx, u, meta, "")
+}
+
+func (s *AuthService) issueSessionTokens(ctx context.Context, u domain.User, meta domain.ClientMeta, deviceName string) (LoginResult, error) {
+	sessionID := uuid.New()
+	now := time.Now()
+	if s.sessions != nil {
+		if err := s.sessions.CreateWithID(ctx, sessionID, u.ID, deviceName, meta.IP, meta.UA, now); err != nil {
+			return LoginResult{}, err
+		}
+	}
+
+	access, _, err := s.jwt.NewAccessToken(u.ID, u.TokenVersion, sessionID, s.cfg.AccessTokenTTL)
+	if err != nil {
+		return LoginResult{}, err
+	}
+	refresh, _, err := s.jwt.NewRefreshToken(u.ID, u.TokenVersion, sessionID, s.cfg.RefreshTokenTTL)
+	if err != nil {
+		return LoginResult{}, err
+	}
+
+	hash := HashToken(refresh)
+	if _, err := s.refreshRepo.Create(ctx, u.ID, sessionID, hash, now.Add(s.cfg.RefreshTokenTTL), meta.IP, meta.UA, deviceName); err != nil {
+		return LoginResult{}, err
+	}
+
+	return LoginResult{
+		UserID:       u.ID,
+		AccessToken:  access,
+		RefreshToken: refresh,
+	}, nil
 }
 
 // Refresh rotates a refresh token and issues new access/refresh tokens.
@@ -298,17 +311,21 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string, meta dom
 	}, nil
 }
 
-// Logout invalidates all tokens for a user by incrementing the token version.
-func (s *AuthService) Logout(ctx context.Context, userID uuid.UUID, accessJTI string, accessExpiresAt time.Time) error {
-	if err := s.users.IncrementTokenVersion(ctx, userID); err != nil {
-		return err
+// Logout invalidates the current session: revokes its refresh tokens and denylists the access JTI.
+func (s *AuthService) Logout(ctx context.Context, userID, sessionID uuid.UUID, accessJTI string, accessExpiresAt time.Time) error {
+	if sessionID != uuid.Nil && s.sessions != nil {
+		if _, err := s.sessions.Revoke(ctx, sessionID); err != nil {
+			return err
+		}
 	}
-	if err := s.refreshRepo.RevokeAllForUser(ctx, userID); err != nil {
-		return err
+	if sessionID != uuid.Nil {
+		if _, err := s.refreshRepo.RevokeAllForSession(ctx, userID, sessionID); err != nil {
+			return err
+		}
 	}
 	ttl := time.Until(accessExpiresAt)
-	if ttl > 0 {
-		_ = s.denylist.Deny(ctx, accessJTI, ttl)
+	if ttl > 0 && accessJTI != "" {
+		return s.denylist.Deny(ctx, accessJTI, ttl)
 	}
 	return nil
 }

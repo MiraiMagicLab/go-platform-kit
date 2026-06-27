@@ -18,10 +18,16 @@ func SecurityHeaders() gin.HandlerFunc {
 }
 
 // CORS returns middleware that handles CORS headers.
+// When allowedOrigins is empty, cross-origin requests are not permitted.
+// Use "*" explicitly only for development.
 func CORS(allowedOrigins []string) gin.HandlerFunc {
-	allowAll := len(allowedOrigins) == 0
+	allowAll := false
 	allowed := map[string]struct{}{}
 	for _, o := range allowedOrigins {
+		o = strings.TrimSpace(o)
+		if o == "" {
+			continue
+		}
 		allowed[o] = struct{}{}
 		if o == "*" {
 			allowAll = true

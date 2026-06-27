@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNew_requiresPostgres(t *testing.T) {
-	_, err := New(context.Background(), WithConfig(DefaultConfig()))
+func TestOpen_requiresPostgres(t *testing.T) {
+	_, err := Open(context.Background(), WithConfig(DefaultConfig()))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "postgres")
 }
@@ -19,4 +19,10 @@ func TestDefaultConfig_validateRequiresSecrets(t *testing.T) {
 	cfg.JWTAccessSecret = ""
 	err := cfg.Validate()
 	require.Error(t, err)
+}
+
+func TestMapError_invalidCredentials(t *testing.T) {
+	mapped, ok := MapError(ErrInvalidCredentials)
+	assert.True(t, ok)
+	assert.Equal(t, 401, mapped.Status)
 }

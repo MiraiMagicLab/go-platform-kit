@@ -1,26 +1,31 @@
 package auth
 
-import "github.com/MiraiMagicLab/go-platform-kit/auth/internal/domain"
-
-// Domain types re-exported for host apps and tests.
-type (
-	User             = domain.User
-	Session          = domain.Session
-	SessionListInfo  = domain.SessionListInfo
-	ClientMeta       = domain.ClientMeta
-	RefreshToken     = domain.RefreshToken
-	RotateResult     = domain.RotateResult
-	AccessTokenMeta  = domain.AccessTokenMeta
-	Role             = domain.Role
-	Permission       = domain.Permission
-	MFAConfig        = domain.MFAConfig
-	MFASetup         = domain.MFASetup
-	OAuthIdentity    = domain.OAuthIdentity
-	AuditEntry       = domain.AuditEntry
-	EmailActionToken = domain.EmailActionToken
+import (
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/domain"
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/ports"
 )
 
-// Sentinel and typed errors returned by auth use cases.
+// DTOs returned by headless use-case methods.
+type (
+	ClientMeta      = domain.ClientMeta
+	Session         = domain.Session
+	User            = domain.User
+	MFASetup        = domain.MFASetup
+	ListUsersFilter = ports.ListUsersFilter
+)
+
+// UserProfile is the authenticated user with role and permission names.
+type UserProfile struct {
+	User        User     `json:"user"`
+	Roles       []string `json:"roles"`
+	Permissions []string `json:"permissions"`
+}
+
+type OAuthProvider string
+
+const OAuthGoogle OAuthProvider = "google"
+
+// Sentinel and typed errors returned by use cases.
 var (
 	ErrInvalidCredentials = domain.ErrInvalidCredentials
 	ErrInvalidRefresh     = domain.ErrInvalidRefresh

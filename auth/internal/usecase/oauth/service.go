@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/ports"
 	"io"
 	"net/http"
 	"strings"
@@ -14,162 +13,206 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/oauth2"
+
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/domain"
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/ports"
 )
 
-var ErrOAuthNotConfigured = errors.New("oauth not configured")
+var (
+	ErrOAuthNotConfigured    = errors.New("oauth not configured")
+	ErrUnsupportedProvider   = errors.New("unsupported oauth provider")
+	ErrGoogleEmailNotVerified = errors.New("google email not verified")
+	ErrGoogleEmailMissing    = errors.New("google email missing")
+)
 
-// Provider represents an OAuth provider.
+// Provider represents an OAuth provider. Only Google is supported.
 type Provider string
 
-const (
-	ProviderGoogle   Provider = "google"
-	ProviderFacebook Provider = "facebook"
-)
+const ProviderGoogle Provider = "google"
 
-// Identity represents a fetched OAuth identity from a provider.
+// Identity represents a fetched OAuth identity from Google.
 type Identity struct {
 	Provider        Provider
 	ProviderSubject string
 	Email           string
+	EmailVerified   bool
+	Name            string
+	Picture         string
 }
 
-// OAuthService handles OAuth2 flows for Google and Facebook.
+// OAuthService handles Google OAuth2 sign-in.
 type OAuthService struct {
-	identities  ports.IdentityRepository
-	users       ports.UserRepository
-	googleCfg   *oauth2.Config
-	facebookCfg *oauth2.Config
-	httpClient  *http.Client
+	identities       ports.IdentityRepository
+	users            ports.UserRepository
+	googleCfg        *oauth2.Config
+	httpClient       *http.Client
+	googleUserInfoURL string
 }
 
-func NewOAuthService(identities ports.IdentityRepository, users ports.UserRepository, googleCfg, facebookCfg *oauth2.Config) *OAuthService {
-	return &OAuthService{
-		identities:  identities,
-		users:       users,
-		googleCfg:   googleCfg,
-		facebookCfg: facebookCfg,
-		httpClient:  &http.Client{Timeout: 10 * time.Second},
+// Option configures OAuthService.
+type Option func(*OAuthService)
+
+// WithHTTPClient overrides the HTTP client used for Google userinfo requests.
+func WithHTTPClient(c *http.Client) Option {
+	return func(s *OAuthService) {
+		if c != nil {
+			s.httpClient = c
+		}
 	}
 }
 
+// WithGoogleUserInfoURL overrides the Google userinfo endpoint (for tests).
+func WithGoogleUserInfoURL(url string) Option {
+	return func(s *OAuthService) {
+		if url != "" {
+			s.googleUserInfoURL = url
+		}
+	}
+}
+
+// NewOAuthService creates a Google OAuth service.
+func NewOAuthService(identities ports.IdentityRepository, users ports.UserRepository, googleCfg *oauth2.Config, opts ...Option) *OAuthService {
+	s := &OAuthService{
+		identities:        identities,
+		users:             users,
+		googleCfg:         googleCfg,
+		httpClient:        &http.Client{Timeout: 10 * time.Second},
+		googleUserInfoURL: googleUserInfoEndpoint,
+	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
+}
+
+// GoogleConfigured reports whether Google OAuth is ready.
+func (s *OAuthService) GoogleConfigured() bool {
+	return IsGoogleConfigured(s.googleCfg)
+}
+
+func (s *OAuthService) requireGoogle(provider Provider) error {
+	if provider != ProviderGoogle {
+		return ErrUnsupportedProvider
+	}
+	if !IsGoogleConfigured(s.googleCfg) {
+		return ErrOAuthNotConfigured
+	}
+	return nil
+}
+
+// AuthCodeURL returns the Google consent URL for the given CSRF state.
 func (s *OAuthService) AuthCodeURL(provider Provider, state string) (string, error) {
-	cfg, err := s.cfg(provider)
-	if err != nil {
+	if err := s.requireGoogle(provider); err != nil {
 		return "", err
 	}
-	return cfg.AuthCodeURL(state, oauth2.AccessTypeOffline), nil
+	return s.googleCfg.AuthCodeURL(state, oauth2.AccessTypeOnline, oauth2.ApprovalForce), nil
 }
 
+// ExchangeAndFetchIdentity exchanges an authorization code and loads the Google profile.
 func (s *OAuthService) ExchangeAndFetchIdentity(ctx context.Context, provider Provider, code string) (Identity, error) {
-	cfg, err := s.cfg(provider)
-	if err != nil {
+	if err := s.requireGoogle(provider); err != nil {
 		return Identity{}, err
 	}
-	tok, err := cfg.Exchange(ctx, code)
+	tok, err := s.googleCfg.Exchange(ctx, code)
 	if err != nil {
-		return Identity{}, err
+		return Identity{}, fmt.Errorf("google token exchange: %w", err)
 	}
-
-	switch provider {
-	case ProviderGoogle:
-		return s.fetchGoogleIdentity(ctx, tok)
-	case ProviderFacebook:
-		return s.fetchFacebookIdentity(ctx, tok)
-	default:
-		return Identity{}, errors.New("unsupported provider")
-	}
+	return s.fetchGoogleIdentity(ctx, tok)
 }
 
-func (s *OAuthService) FindOrCreateUserForIdentity(ctx context.Context, id Identity) (uuid.UUID, error) {
+// FindOrCreateUserForIdentity links or creates a local user for a Google identity.
+// The second return value is true when a new user account was created.
+func (s *OAuthService) FindOrCreateUserForIdentity(ctx context.Context, id Identity) (uuid.UUID, bool, error) {
+	if id.Provider != ProviderGoogle {
+		return uuid.Nil, false, ErrUnsupportedProvider
+	}
 	if id.ProviderSubject == "" {
-		return uuid.Nil, errors.New("missing subject")
+		return uuid.Nil, false, errors.New("missing subject")
 	}
 	if id.Email == "" {
-		id.Email = fmt.Sprintf("%s_%s@example.invalid", id.Provider, id.ProviderSubject)
+		return uuid.Nil, false, ErrGoogleEmailMissing
+	}
+	if !id.EmailVerified {
+		return uuid.Nil, false, ErrGoogleEmailNotVerified
 	}
 
 	if uid, ok, err := s.identities.FindUserIDByProvider(ctx, string(id.Provider), id.ProviderSubject); err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, false, err
 	} else if ok {
-		if id.Email != "" {
-			_ = s.users.SetEmailVerified(ctx, uid, true)
-		}
-		return uid, nil
+		_ = s.users.SetEmailVerified(ctx, uid, true)
+		return uid, false, nil
 	}
 
 	randomPass := uuid.New().String()
 	pwHash, err := bcrypt.GenerateFromPassword([]byte(randomPass), bcrypt.DefaultCost)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, false, err
 	}
 	userID, err := s.users.CreateOAuthUser(ctx, strings.ToLower(id.Email), string(pwHash))
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, false, err
 	}
 	_ = s.users.SetEmailVerified(ctx, userID, true)
 	_ = s.identities.LinkIdentity(ctx, userID, string(id.Provider), id.ProviderSubject, id.Email)
-	return userID, nil
-}
-
-func (s *OAuthService) cfg(provider Provider) (*oauth2.Config, error) {
-	switch provider {
-	case ProviderGoogle:
-		if s.googleCfg == nil {
-			return nil, ErrOAuthNotConfigured
-		}
-		return s.googleCfg, nil
-	case ProviderFacebook:
-		if s.facebookCfg == nil {
-			return nil, ErrOAuthNotConfigured
-		}
-		return s.facebookCfg, nil
-	default:
-		return nil, errors.New("unsupported provider")
-	}
+	return userID, true, nil
 }
 
 func (s *OAuthService) fetchGoogleIdentity(ctx context.Context, tok *oauth2.Token) (Identity, error) {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://openidconnect.googleapis.com/v1/userinfo", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.googleUserInfoURL, nil)
+	if err != nil {
+		return Identity{}, err
+	}
 	req.Header.Set("Authorization", "Bearer "+tok.AccessToken)
+
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return Identity{}, err
 	}
 	defer resp.Body.Close()
-	b, _ := io.ReadAll(resp.Body)
+
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return Identity{}, err
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return Identity{}, errors.New("failed to fetch userinfo")
+		return Identity{}, fmt.Errorf("google userinfo: status %d", resp.StatusCode)
 	}
 
 	var u struct {
-		Sub   string `json:"sub"`
-		Email string `json:"email"`
+		Sub           string `json:"sub"`
+		Email         string `json:"email"`
+		EmailVerified bool   `json:"email_verified"`
+		Name          string `json:"name"`
+		Picture       string `json:"picture"`
 	}
 	if err := json.Unmarshal(b, &u); err != nil {
 		return Identity{}, err
 	}
-	return Identity{Provider: ProviderGoogle, ProviderSubject: u.Sub, Email: u.Email}, nil
+	if u.Sub == "" {
+		return Identity{}, errors.New("google userinfo: missing sub")
+	}
+
+	return Identity{
+		Provider:        ProviderGoogle,
+		ProviderSubject: u.Sub,
+		Email:           u.Email,
+		EmailVerified:   u.EmailVerified,
+		Name:            u.Name,
+		Picture:         u.Picture,
+	}, nil
 }
 
-func (s *OAuthService) fetchFacebookIdentity(ctx context.Context, tok *oauth2.Token) (Identity, error) {
-	url := "https://graph.facebook.com/me?fields=id,email&access_token=" + tok.AccessToken
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return Identity{}, err
+// MapExchangeError converts low-level OAuth errors to domain errors when appropriate.
+func MapExchangeError(err error) error {
+	if err == nil {
+		return nil
 	}
-	defer resp.Body.Close()
-	b, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return Identity{}, errors.New("failed to fetch userinfo")
+	switch {
+	case errors.Is(err, ErrGoogleEmailNotVerified):
+		return domain.ErrEmailNotVerified{}
+	case errors.Is(err, ErrGoogleEmailMissing):
+		return domain.ErrInvalidCredentials
+	default:
+		return err
 	}
-
-	var u struct {
-		ID    string `json:"id"`
-		Email string `json:"email"`
-	}
-	if err := json.Unmarshal(b, &u); err != nil {
-		return Identity{}, err
-	}
-	return Identity{Provider: ProviderFacebook, ProviderSubject: u.ID, Email: u.Email}, nil
 }

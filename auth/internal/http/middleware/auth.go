@@ -1,15 +1,18 @@
 package middleware
 
 import (
-	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/ports"
-	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/security/jwt"
+	"context"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/MiraiMagicLab/go-platform-kit/platform/httpx"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/domain"
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/ports"
+	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/security/jwt"
+	"github.com/MiraiMagicLab/go-platform-kit/platform/httpx"
 )
 
 const (
@@ -66,8 +69,14 @@ func SetAuthErrorCode(c *gin.Context, code string) {
 	c.Set(ctxErrorCodeKey, code)
 }
 
+// UserAuthCache caches user auth state for JWT middleware.
+type UserAuthCache interface {
+	Get(ctx context.Context, userID uuid.UUID) (domain.User, bool, error)
+	Set(ctx context.Context, user domain.User) error
+}
+
 // JWTAuth returns middleware that validates JWT access tokens.
-func JWTAuth(jwtm *jwt.Manager, users ports.UserRepository, denylist ports.AccessTokenDenylist) gin.HandlerFunc {
+func JWTAuth(jwtm *jwt.Manager, users ports.UserRepository, denylist ports.AccessTokenDenylist, userCache UserAuthCache) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		h := c.GetHeader("Authorization")
 		if h == "" || !strings.HasPrefix(h, "Bearer ") {
@@ -103,7 +112,7 @@ func JWTAuth(jwtm *jwt.Manager, users ports.UserRepository, denylist ports.Acces
 			}
 		}
 
-		u, err := users.GetByID(c.Request.Context(), userID)
+		u, err := loadUserForAuth(c.Request.Context(), users, userCache, userID)
 		if err != nil || u.TokenVersion != claims.TokenVersion {
 			httpx.FailCode(c, http.StatusUnauthorized, httpx.CodeAuthTokenRevoked, nil)
 			c.Abort()

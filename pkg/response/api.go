@@ -1,3 +1,6 @@
+// Package response provides standard JSON response helpers and error code management
+// for Gin-based HTTP APIs. All API responses use a consistent envelope format
+// with a stable error code system (MPPCCNNN) for client-side i18n.
 package response
 
 import (
@@ -9,6 +12,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// ApiResponse is the standard JSON envelope for all API responses.
+// Successful responses set Success to true and populate Data.
+// Error responses set Success to false and populate Code with a stable M-code identifier.
 type ApiResponse struct {
 	Success bool                   `json:"success"`
 	Code    string                 `json:"code"`
@@ -16,6 +22,8 @@ type ApiResponse struct {
 	Data    interface{}            `json:"data,omitempty"`
 }
 
+// Success writes a success JSON response with the given HTTP status, code, data, and params.
+// If code is empty, it defaults to "success".
 func Success(c *gin.Context, status int, code string, data interface{}, params map[string]interface{}) {
 	if code == "" {
 		code = "success"
@@ -28,6 +36,8 @@ func Success(c *gin.Context, status int, code string, data interface{}, params m
 	})
 }
 
+// Fail writes an error JSON response with the given HTTP status, error code, and params.
+// If code is empty, it defaults to CodeUnknownError.
 func Fail(c *gin.Context, status int, code string, params map[string]interface{}) {
 	if code == "" {
 		code = CodeUnknownError
@@ -56,6 +66,8 @@ func FailCodeArgs(c *gin.Context, status int, code string, args ...interface{}) 
 	FailCode(c, status, code, BuildParams(args...))
 }
 
+// BuildParams converts positional arguments into a map suitable for the Params field.
+// Arguments are keyed by their zero-based index as well as stored in an "args" slice.
 func BuildParams(args ...interface{}) map[string]interface{} {
 	if len(args) == 0 {
 		return nil
@@ -68,6 +80,7 @@ func BuildParams(args ...interface{}) map[string]interface{} {
 	return params
 }
 
+// RenderMessage replaces positional placeholders ({0}, {1}, ...) in a template string with the provided arguments.
 func RenderMessage(template string, args ...interface{}) string {
 	out := template
 	for i, v := range args {
@@ -88,6 +101,7 @@ type PaginationMeta struct {
 	Total  int64 `json:"total"`
 }
 
+// PaginationResult wraps records with limit/offset pagination metadata.
 type PaginationResult struct {
 	Records    interface{}    `json:"records"`
 	Pagination PaginationMeta `json:"pagination"`
@@ -115,6 +129,7 @@ type CursorPaginationMeta struct {
 	HasMore    bool   `json:"hasMore"`
 }
 
+// CursorPaginationResult wraps records with cursor-based pagination metadata.
 type CursorPaginationResult struct {
 	Records    interface{}          `json:"records"`
 	Pagination CursorPaginationMeta `json:"pagination"`

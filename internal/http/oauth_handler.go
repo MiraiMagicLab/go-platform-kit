@@ -23,6 +23,7 @@ type OAuthHandler struct {
 	lifecycle    *Lifecycle
 }
 
+// NewOAuthHandler creates an OAuthHandler for Google and Facebook OAuth2 login flows.
 func NewOAuthHandler(
 	oauthSvc *oauthSvc.OAuthService,
 	authSvc *auth.AuthService,
@@ -41,6 +42,8 @@ func NewOAuthHandler(
 	}
 }
 
+// Login handles GET /oauth/:provider/login. It redirects the user to the
+// OAuth provider's consent page with a CSRF state cookie.
 func (h *OAuthHandler) Login(c *gin.Context) {
 	provider := oauthSvc.Provider(c.Param("provider"))
 	state := uuid.New().String()
@@ -53,6 +56,9 @@ func (h *OAuthHandler) Login(c *gin.Context) {
 	c.Redirect(http.StatusTemporaryRedirect, url)
 }
 
+// Callback handles GET /oauth/:provider/callback. It validates the CSRF state,
+// exchanges the authorization code for tokens, finds or creates the user,
+// issues a session, and redirects to the frontend with tokens.
 func (h *OAuthHandler) Callback(c *gin.Context) {
 	provider := oauthSvc.Provider(c.Param("provider"))
 	state := c.Query("state")

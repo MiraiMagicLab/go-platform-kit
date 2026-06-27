@@ -16,6 +16,7 @@ type RBACAdapter struct {
 	repo *postgres.RBACRepo
 }
 
+// NewRBACAdapter creates a RBACAdapter wrapping the given RBACRepo.
 func NewRBACAdapter(repo *postgres.RBACRepo) *RBACAdapter {
 	return &RBACAdapter{repo: repo}
 }

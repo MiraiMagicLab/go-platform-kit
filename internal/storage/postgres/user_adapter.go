@@ -19,6 +19,7 @@ type UserAdapter struct {
 	repo *postgres.UserRepo
 }
 
+// NewUserAdapter creates a UserAdapter wrapping the given UserRepo.
 func NewUserAdapter(repo *postgres.UserRepo) *UserAdapter {
 	return &UserAdapter{repo: repo}
 }

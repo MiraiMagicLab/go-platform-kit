@@ -13,6 +13,10 @@ func init() {
 	}
 }
 
+// RegisterMessages adds domain-specific error code-to-message mappings to the global registry.
+// This is called at startup by host applications to register product-specific error messages.
+// Empty keys and values are silently ignored.
+// This function is safe for concurrent use.
 func RegisterMessages(entries map[string]string) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -23,12 +27,17 @@ func RegisterMessages(entries map[string]string) {
 	}
 }
 
+// DefaultMessage returns the human-readable message for the given error code.
+// Returns an empty string if the code is not registered.
+// This function is safe for concurrent use.
 func DefaultMessage(code string) string {
 	mu.RLock()
 	defer mu.RUnlock()
 	return allMessages[code]
 }
 
+// AllRegisteredCodes returns a snapshot of all registered error code-to-message mappings.
+// This function is safe for concurrent use.
 func AllRegisteredCodes() map[string]string {
 	mu.RLock()
 	defer mu.RUnlock()

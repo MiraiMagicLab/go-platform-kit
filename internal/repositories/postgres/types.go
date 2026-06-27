@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 )
 
+// UserDTO maps directly to the users table row.
 type UserDTO struct {
 	ID                   uuid.UUID
 	Email                string
@@ -23,6 +24,7 @@ type UserDTO struct {
 	UpdatedAt            time.Time
 }
 
+// RefreshTokenDTO maps directly to the refresh_tokens table row.
 type RefreshTokenDTO struct {
 	ID            uuid.UUID
 	UserID        uuid.UUID
@@ -62,6 +64,7 @@ type SessionListRow struct {
 	DeviceName string
 }
 
+// RotateResult contains the outcome of a refresh token rotation.
 type RotateResult struct {
 	UserID            uuid.UUID
 	SessionID         uuid.UUID
@@ -70,6 +73,7 @@ type RotateResult struct {
 	ReplayDetected    bool
 }
 
+// MFADTO maps directly to the user_mfa table row.
 type MFADTO struct {
 	UserID     uuid.UUID
 	TOTPSecret string
@@ -78,6 +82,7 @@ type MFADTO struct {
 	CreatedAt  time.Time
 }
 
+// AuditLogCreate holds the payload for inserting an audit log entry.
 type AuditLogCreate struct {
 	UserID    *uuid.UUID
 	Action    string

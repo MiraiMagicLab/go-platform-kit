@@ -18,10 +18,13 @@ type SessionHandler struct {
 	auditSvc   *audit.AuditService
 }
 
+// NewSessionHandler creates a SessionHandler for managing user sessions.
 func NewSessionHandler(sessionSvc *session.SessionService, auditSvc *audit.AuditService) *SessionHandler {
 	return &SessionHandler{sessionSvc: sessionSvc, auditSvc: auditSvc}
 }
 
+// List handles GET /sessions. It returns all active sessions for the authenticated user,
+// marking the current session.
 func (h *SessionHandler) List(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
@@ -58,6 +61,8 @@ func (h *SessionHandler) List(c *gin.Context) {
 	response.Success(c, http.StatusOK, "success", out, nil)
 }
 
+// RevokeOne handles DELETE /sessions/:id. It revokes a specific session by ID,
+// adding its access token to the denylist.
 func (h *SessionHandler) RevokeOne(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
@@ -83,6 +88,8 @@ func (h *SessionHandler) RevokeOne(c *gin.Context) {
 	response.Success(c, http.StatusOK, "success", gin.H{"ok": true}, nil)
 }
 
+// RevokeOthers handles DELETE /sessions/others. It revokes all sessions
+// except the current one for the authenticated user.
 func (h *SessionHandler) RevokeOthers(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {

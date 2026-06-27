@@ -17,6 +17,7 @@ import (
 	"github.com/MiraiMagicLab/go-platform-kit/v2/pkg/ports"
 )
 
+// ErrOAuthNotConfigured is returned when an OAuth provider's credentials have not been configured.
 var ErrOAuthNotConfigured = errors.New("oauth not configured")
 
 // Provider represents an OAuth provider.
@@ -43,6 +44,7 @@ type OAuthService struct {
 	httpClient  *http.Client
 }
 
+// NewOAuthService creates an OAuthService. Provider configs may be nil if that provider is unused.
 func NewOAuthService(identities ports.IdentityRepository, users ports.UserRepository, googleCfg, facebookCfg *oauth2.Config) *OAuthService {
 	return &OAuthService{
 		identities:  identities,
@@ -53,6 +55,7 @@ func NewOAuthService(identities ports.IdentityRepository, users ports.UserReposi
 	}
 }
 
+// AuthCodeURL returns the OAuth2 authorization URL for the given provider and state parameter.
 func (s *OAuthService) AuthCodeURL(provider Provider, state string) (string, error) {
 	cfg, err := s.cfg(provider)
 	if err != nil {
@@ -61,6 +64,8 @@ func (s *OAuthService) AuthCodeURL(provider Provider, state string) (string, err
 	return cfg.AuthCodeURL(state, oauth2.AccessTypeOffline), nil
 }
 
+// ExchangeAndFetchIdentity exchanges an OAuth2 authorization code for a token and
+// fetches the user's identity from the provider's userinfo endpoint.
 func (s *OAuthService) ExchangeAndFetchIdentity(ctx context.Context, provider Provider, code string) (Identity, error) {
 	cfg, err := s.cfg(provider)
 	if err != nil {
@@ -81,6 +86,9 @@ func (s *OAuthService) ExchangeAndFetchIdentity(ctx context.Context, provider Pr
 	}
 }
 
+// FindOrCreateUserForIdentity looks up an existing user by their OAuth provider identity,
+// or creates a new user with a random password and links the identity. The user's email
+// is automatically verified upon successful OAuth login.
 func (s *OAuthService) FindOrCreateUserForIdentity(ctx context.Context, id Identity) (uuid.UUID, error) {
 	if id.ProviderSubject == "" {
 		return uuid.Nil, errors.New("missing subject")

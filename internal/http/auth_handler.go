@@ -35,6 +35,8 @@ type AuthHandler struct {
 	emailValidate EmailValidator
 }
 
+// NewAuthHandler creates an AuthHandler with the given dependencies. If emailValidate
+// is nil, a default RFC 5322 validator is used.
 func NewAuthHandler(
 	authSvc *auth.AuthService,
 	emailSvc *email.EmailService,
@@ -63,6 +65,8 @@ type registerReq struct {
 	Password string `json:"password" binding:"required,min=8"`
 }
 
+// Register handles POST /register. It validates email and password format,
+// creates a new user account, and returns the created user ID.
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req registerReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -100,6 +104,9 @@ type loginReq struct {
 	Password string `json:"password" binding:"required"`
 }
 
+// Login handles POST /login. It authenticates the user's credentials and returns
+// access/refresh tokens, or a MFA challenge token when MFA is enabled.
+// It returns specific error codes for banned, locked, or email-unverified accounts.
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req loginReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -156,6 +163,8 @@ type refreshReq struct {
 	RefreshToken string `json:"refresh_token" binding:"required"`
 }
 
+// Refresh handles POST /refresh. It rotates the refresh token and returns a new
+// access/refresh token pair.
 func (h *AuthHandler) Refresh(c *gin.Context) {
 	var req refreshReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -181,6 +190,8 @@ type completeMFAReq struct {
 	Code     string `json:"code" binding:"required"`
 }
 
+// CompleteMFA handles POST /mfa/complete. It validates the TOTP code against the
+// MFA challenge token and issues a full session with access/refresh tokens.
 func (h *AuthHandler) CompleteMFA(c *gin.Context) {
 	var req completeMFAReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -202,6 +213,8 @@ func (h *AuthHandler) CompleteMFA(c *gin.Context) {
 	response.Success(c, http.StatusOK, "success", res, nil)
 }
 
+// Logout handles POST /logout. It adds the current access token JTI to the denylist
+// and revokes all refresh tokens for the current session.
 func (h *AuthHandler) Logout(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
@@ -226,6 +239,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	response.Success(c, http.StatusOK, "success", gin.H{"ok": true}, nil)
 }
 
+// Me handles GET /me. It returns the authenticated user's profile, roles, and permissions.
 func (h *AuthHandler) Me(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
@@ -252,6 +266,8 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	}, nil)
 }
 
+// RequestVerifyEmail handles POST /email/verify/request. It generates and sends
+// a verification email to the authenticated user's email address.
 func (h *AuthHandler) RequestVerifyEmail(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
@@ -273,6 +289,8 @@ type confirmTokenReq struct {
 	Token string `json:"token" binding:"required"`
 }
 
+// ConfirmVerifyEmail handles POST /email/verify/confirm. It validates the verification
+// token and marks the user's email as verified.
 func (h *AuthHandler) ConfirmVerifyEmail(c *gin.Context) {
 	var req confirmTokenReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -294,6 +312,8 @@ type forgotPasswordReq struct {
 	Email string `json:"email" binding:"required,email"`
 }
 
+// ForgotPassword handles POST /password/forgot. It sends a password reset token
+// (OTP code or link depending on configuration) to the specified email address.
 func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 	var req forgotPasswordReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -316,6 +336,8 @@ type resetPasswordReq struct {
 	NewPassword string `json:"new_password" binding:"required,min=8"`
 }
 
+// ResetPassword handles POST /password/reset. It validates the reset token and
+// sets a new password for the user, revoking all existing sessions.
 func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	var req resetPasswordReq
 	if err := c.ShouldBindJSON(&req); err != nil {

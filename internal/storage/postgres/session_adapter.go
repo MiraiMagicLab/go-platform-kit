@@ -18,6 +18,7 @@ type SessionAdapter struct {
 	repo *postgres.SessionsRepo
 }
 
+// NewSessionAdapter creates a SessionAdapter wrapping the given SessionsRepo.
 func NewSessionAdapter(repo *postgres.SessionsRepo) *SessionAdapter {
 	return &SessionAdapter{repo: repo}
 }

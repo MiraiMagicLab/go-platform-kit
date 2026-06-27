@@ -8,14 +8,17 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// RBACRepo provides PostgreSQL-backed persistence for roles, permissions, and their assignments.
 type RBACRepo struct {
 	db *pgxpool.Pool
 }
 
+// NewRBACRepo returns an RBACRepo backed by the given connection pool.
 func NewRBACRepo(db *pgxpool.Pool) *RBACRepo {
 	return &RBACRepo{db: db}
 }
 
+// CreateRole inserts a new role and returns its generated ID.
 func (r *RBACRepo) CreateRole(ctx context.Context, name string) (uuid.UUID, error) {
 	var id uuid.UUID
 	err := r.db.QueryRow(ctx, `
@@ -25,6 +28,7 @@ func (r *RBACRepo) CreateRole(ctx context.Context, name string) (uuid.UUID, erro
 	return id, err
 }
 
+// CreatePermission inserts a new permission and returns its generated ID.
 func (r *RBACRepo) CreatePermission(ctx context.Context, name string) (uuid.UUID, error) {
 	var id uuid.UUID
 	err := r.db.QueryRow(ctx, `
@@ -34,6 +38,8 @@ func (r *RBACRepo) CreatePermission(ctx context.Context, name string) (uuid.UUID
 	return id, err
 }
 
+// AssignPermissionsToRole batch-inserts permission assignments for the given role.
+// Duplicate assignments are silently ignored.
 func (r *RBACRepo) AssignPermissionsToRole(ctx context.Context, roleID uuid.UUID, permissionIDs []uuid.UUID) error {
 	batch := &pgx.Batch{}
 	for _, pid := range permissionIDs {
@@ -56,6 +62,8 @@ func (r *RBACRepo) AssignPermissionsToRole(ctx context.Context, roleID uuid.UUID
 	return nil
 }
 
+// AssignRolesToUser batch-inserts role assignments for the given user.
+// Duplicate assignments are silently ignored.
 func (r *RBACRepo) AssignRolesToUser(ctx context.Context, userID uuid.UUID, roleIDs []uuid.UUID) error {
 	batch := &pgx.Batch{}
 	for _, rid := range roleIDs {
@@ -71,6 +79,7 @@ func (r *RBACRepo) AssignRolesToUser(ctx context.Context, userID uuid.UUID, role
 	return err
 }
 
+// ListUserPermissions returns the distinct set of permission names assigned to the given user through their roles.
 func (r *RBACRepo) ListUserPermissions(ctx context.Context, userID uuid.UUID) ([]string, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT DISTINCT p.name
@@ -96,6 +105,7 @@ func (r *RBACRepo) ListUserPermissions(ctx context.Context, userID uuid.UUID) ([
 	return out, rows.Err()
 }
 
+// ListUserIDsByRole returns all user IDs that have the given role assigned.
 func (r *RBACRepo) ListUserIDsByRole(ctx context.Context, roleID uuid.UUID) ([]uuid.UUID, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT user_id FROM user_roles WHERE role_id = $1
@@ -116,6 +126,7 @@ func (r *RBACRepo) ListUserIDsByRole(ctx context.Context, roleID uuid.UUID) ([]u
 	return ids, rows.Err()
 }
 
+// ListUserRoles returns the names of all roles assigned to the given user.
 func (r *RBACRepo) ListUserRoles(ctx context.Context, userID uuid.UUID) ([]string, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT r.name
@@ -139,4 +150,3 @@ func (r *RBACRepo) ListUserRoles(ctx context.Context, userID uuid.UUID) ([]strin
 	}
 	return out, rows.Err()
 }
-

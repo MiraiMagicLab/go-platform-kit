@@ -1,25 +1,33 @@
-// Package authkit là API nhúng chính của go-auth-lib: Gin + Postgres (+ Redis tuỳ chọn) cho auth/RBAC/MFA/OAuth/email.
+// Package authkit is the primary embedded API for go-platform-kit: a Gin + PostgreSQL
+// (+ optional Redis) authentication, RBAC, MFA, OAuth, and email verification toolkit.
 //
-// # Cấu trúc module (chuẩn thư viện Go)
+// # Module structure
 //
-// Đường dẫn public — consumer được phép import, giữ tương thích semver:
+// Public API surface (consumers may import, semver-stable):
 //
-//	github.com/MiraiMagicLab/go-platform-kit/v2/pkg/authkit   — New, Mount*, middleware
-//	github.com/MiraiMagicLab/go-platform-kit/v2/pkg/response  — envelope JSON Success / Fail / FailCode (dùng chung với host app)
-//	github.com/MiraiMagicLab/go-platform-kit/v2/pkg/token     — JWT (khi host cần tách lẻ)
+//	github.com/MiraiMagicLab/go-platform-kit/v2/pkg/authkit   — New, Mount*, middleware exports
+//	github.com/MiraiMagicLab/go-platform-kit/v2/pkg/response  — JSON response envelope (Success / Fail / FailCode)
+//	github.com/MiraiMagicLab/go-platform-kit/v2/pkg/token     — JWT creation and parsing
+//	github.com/MiraiMagicLab/go-platform-kit/v2/pkg/ports     — Repository and service interfaces
+//	github.com/MiraiMagicLab/go-platform-kit/v2/pkg/domain    — Domain types with behavior
 //
-// internal/ — implementation, không import từ repo ngoài module:
+// internal/ — implementation details, not importable outside this module:
 //
-//	internal/controllers    — HTTP handlers Gin (tương đương controllers trong plugNmeet-server/pkg)
-//	internal/middleware     — JWT, RBAC, rate limit, observability
-//	internal/services       — nghiệp vụ
-//	internal/repositories/postgres — truy cập DB
-//	internal/db, internal/config, internal/models, internal/security
+//	internal/auth          — Authentication use cases (register, login, refresh, logout)
+//	internal/session       — Session management
+//	internal/mfa           — TOTP multi-factor authentication
+//	internal/oauth         — OAuth2 flows (Google, Facebook)
+//	internal/rbac          — Role and permission management
+//	internal/email         — Email verification and password reset
+//	internal/http          — HTTP handlers and middleware
+//	internal/storage       — PostgreSQL repository implementations
+//	internal/security      — AES-GCM encryption for secrets at rest
 //
-// Schema & ví dụ:
+// Schema and examples:
 //
-//	sql/, migrations/       — SQL
-//	examples/embedded       — mẫu nhúng tối thiểu
+//	migrations/            — SQL migration files
+//	examples/embedded      — Minimal embedded usage example
 //
-// Tích hợp thông báo / hàng đợi: gán Config.Hooks.AfterSessionIssued (chạy trong goroutine, không block response).
+// Lifecycle hooks can be set on Config.Hooks to run side-effects (e.g. notifications)
+// asynchronously after session issuance without blocking the HTTP response.
 package authkit

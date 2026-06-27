@@ -26,16 +26,22 @@ const (
 type DeliveryMode string
 
 const (
-	DeliveryOTP  DeliveryMode = "otp"
+	// DeliveryOTP sends a one-time password code via email.
+	DeliveryOTP DeliveryMode = "otp"
+	// DeliveryLink sends a clickable reset link via email.
 	DeliveryLink DeliveryMode = "link"
 )
 
 // Hooks provides customization for email links and templates.
 type Hooks struct {
-	BuildVerifyEmailLink   func(publicBaseURL, rawToken string) string
+	// BuildVerifyEmailLink constructs the full verification URL from a base URL and raw token.
+	BuildVerifyEmailLink func(publicBaseURL, rawToken string) string
+	// BuildResetPasswordLink constructs the full password reset URL from a base URL and raw token.
 	BuildResetPasswordLink func(publicBaseURL, rawToken string) string
-	RenderVerifyEmail      func(link string) (subject string, body string)
-	RenderResetPassword    func(link string) (subject string, body string)
+	// RenderVerifyEmail returns the email subject and body for the verification email.
+	RenderVerifyEmail func(link string) (subject string, body string)
+	// RenderResetPassword returns the email subject and body for the password reset email.
+	RenderResetPassword func(link string) (subject string, body string)
 }
 
 // EmailService handles email verification and password reset flows.
@@ -55,6 +61,8 @@ type EmailService struct {
 	resetDelivery   DeliveryMode
 }
 
+// NewEmailService creates an EmailService with sensible defaults for link builders
+// and email renderers. Pass nil hooks to use built-in defaults.
 func NewEmailService(
 	users ports.UserRepository,
 	tokens ports.EmailTokenRepository,
@@ -104,6 +112,8 @@ func NewEmailService(
 	}
 }
 
+// RequestVerifyEmail generates a verification token and sends a verification email
+// to the user. It returns an error if the email sender is not configured.
 func (s *EmailService) RequestVerifyEmail(ctx context.Context, userID uuid.UUID) error {
 	if s.sender == nil {
 		return fmt.Errorf("email sender not configured")
@@ -124,6 +134,8 @@ func (s *EmailService) RequestVerifyEmail(ctx context.Context, userID uuid.UUID)
 	return s.sender.Send(ctx, u.Email, subject, body)
 }
 
+// ConfirmVerifyEmail validates the verification token and marks the user's email as verified.
+// It returns an error if the token is invalid or expired.
 func (s *EmailService) ConfirmVerifyEmail(ctx context.Context, rawToken string) error {
 	userID, ok, err := s.tokens.Consume(ctx, actionVerify, sha256hex(rawToken), time.Now())
 	if err != nil || !ok {
@@ -132,6 +144,9 @@ func (s *EmailService) ConfirmVerifyEmail(ctx context.Context, rawToken string) 
 	return s.users.SetEmailVerified(ctx, userID, true)
 }
 
+// ForgotPassword initiates a password reset flow by generating a token (link or OTP
+// depending on the configured delivery mode) and emailing it to the user.
+// It returns silently if the email address is not found, mitigating timing-attack side channels.
 func (s *EmailService) ForgotPassword(ctx context.Context, email string) error {
 	if s.sender == nil {
 		return fmt.Errorf("email sender not configured")
@@ -161,6 +176,8 @@ func (s *EmailService) ForgotPassword(ctx context.Context, email string) error {
 	return s.sender.Send(ctx, u.Email, subject, body)
 }
 
+// ResetPassword validates the reset token, sets a new password for the user,
+// increments the token version, and revokes all active refresh tokens.
 func (s *EmailService) ResetPassword(ctx context.Context, rawToken, newPassword string) error {
 	userID, ok, err := s.tokens.Consume(ctx, actionReset, sha256hex(rawToken), time.Now())
 	if err != nil || !ok {

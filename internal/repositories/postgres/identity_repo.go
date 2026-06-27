@@ -8,14 +8,18 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// IdentityRepo provides PostgreSQL-backed persistence for external identity links (OAuth providers).
 type IdentityRepo struct {
 	db *pgxpool.Pool
 }
 
+// NewIdentityRepo returns an IdentityRepo backed by the given connection pool.
 func NewIdentityRepo(db *pgxpool.Pool) *IdentityRepo {
 	return &IdentityRepo{db: db}
 }
 
+// FindUserIDByProvider returns the user ID linked to the given external provider and subject.
+// If no link exists, it returns false with a nil error.
 func (r *IdentityRepo) FindUserIDByProvider(ctx context.Context, provider, providerSubject string) (uuid.UUID, bool, error) {
 	var userID uuid.UUID
 	err := r.db.QueryRow(ctx, `
@@ -32,6 +36,8 @@ func (r *IdentityRepo) FindUserIDByProvider(ctx context.Context, provider, provi
 	return userID, true, nil
 }
 
+// LinkIdentity associates an external provider identity with a user.
+// It is a no-op if the provider/subject pair is already linked.
 func (r *IdentityRepo) LinkIdentity(ctx context.Context, userID uuid.UUID, provider, providerSubject, email string) error {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_identities (user_id, provider, provider_subject, email)
@@ -40,4 +46,3 @@ func (r *IdentityRepo) LinkIdentity(ctx context.Context, userID uuid.UUID, provi
 	`, userID, provider, providerSubject, email)
 	return err
 }
-

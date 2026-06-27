@@ -19,10 +19,13 @@ type MFAHandler struct {
 	users    ports.UserRepository
 }
 
+// NewMFAHandler creates an MFAHandler for TOTP setup, verification, and disable endpoints.
 func NewMFAHandler(mfaSvc *mfa.MFAService, auditSvc *audit.AuditService, users ports.UserRepository) *MFAHandler {
 	return &MFAHandler{mfaSvc: mfaSvc, auditSvc: auditSvc, users: users}
 }
 
+// Setup handles POST /mfa/totp/setup. It generates a TOTP secret and returns
+// the provisioning URI and secret for the authenticated user.
 func (h *MFAHandler) Setup(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
@@ -47,6 +50,8 @@ type enableMFAReq struct {
 	Code string `json:"code" binding:"required"`
 }
 
+// Enable handles POST /mfa/totp/enable. It verifies the TOTP code and enables
+// MFA for the authenticated user.
 func (h *MFAHandler) Enable(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
@@ -72,6 +77,8 @@ type disableMFAReq struct {
 	Code     string `json:"code"`
 }
 
+// Disable handles POST /mfa/totp/disable. It disables MFA for the authenticated
+// user after verifying either a password or TOTP code.
 func (h *MFAHandler) Disable(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {

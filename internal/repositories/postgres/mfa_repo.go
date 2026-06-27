@@ -9,12 +9,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// MFARepo provides PostgreSQL-backed persistence for multi-factor authentication state.
 type MFARepo struct {
 	db *pgxpool.Pool
 }
 
+// NewMFARepo returns an MFARepo backed by the given connection pool.
 func NewMFARepo(db *pgxpool.Pool) *MFARepo { return &MFARepo{db: db} }
 
+// UpsertTOTPSecret inserts or updates the TOTP secret for the given user.
+// It sets the MFA state to disabled, requiring a separate EnableMFA call to activate.
 func (r *MFARepo) UpsertTOTPSecret(ctx context.Context, userID uuid.UUID, secret string) error {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_mfa (user_id, totp_secret, enabled)
@@ -25,6 +29,8 @@ func (r *MFARepo) UpsertTOTPSecret(ctx context.Context, userID uuid.UUID, secret
 	return err
 }
 
+// GetMFA returns the MFA record for the given user.
+// If no record exists, it returns false with a nil error.
 func (r *MFARepo) GetMFA(ctx context.Context, userID uuid.UUID) (MFADTO, bool, error) {
 	var m MFADTO
 	err := r.db.QueryRow(ctx, `
@@ -41,6 +47,7 @@ func (r *MFARepo) GetMFA(ctx context.Context, userID uuid.UUID) (MFADTO, bool, e
 	return m, true, nil
 }
 
+// EnableMFA activates MFA for the given user and records the activation time.
 func (r *MFARepo) EnableMFA(ctx context.Context, userID uuid.UUID) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE user_mfa
@@ -50,6 +57,7 @@ func (r *MFARepo) EnableMFA(ctx context.Context, userID uuid.UUID) error {
 	return err
 }
 
+// DisableMFA removes the MFA record and all associated recovery codes for the given user.
 func (r *MFARepo) DisableMFA(ctx context.Context, userID uuid.UUID) error {
 	_, err := r.db.Exec(ctx, `
 		DELETE FROM user_mfa WHERE user_id = $1
@@ -61,6 +69,8 @@ func (r *MFARepo) DisableMFA(ctx context.Context, userID uuid.UUID) error {
 	return err
 }
 
+// ReplaceRecoveryCodes atomically replaces all recovery codes for the given user within a transaction.
+// Existing codes are deleted before the new set is inserted.
 func (r *MFARepo) ReplaceRecoveryCodes(ctx context.Context, userID uuid.UUID, codeHashes []string) error {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
@@ -91,6 +101,8 @@ func (r *MFARepo) ReplaceRecoveryCodes(ctx context.Context, userID uuid.UUID, co
 	return tx.Commit(ctx)
 }
 
+// UseRecoveryCode marks a matching unused recovery code as used.
+// It returns true if the code was valid and consumed, false if no matching unused code was found.
 func (r *MFARepo) UseRecoveryCode(ctx context.Context, userID uuid.UUID, codeHash string) (bool, error) {
 	var id uuid.UUID
 	err := r.db.QueryRow(ctx, `
@@ -117,6 +129,7 @@ func (r *MFARepo) UseRecoveryCode(ctx context.Context, userID uuid.UUID, codeHas
 	return ct.RowsAffected() == 1, nil
 }
 
+// Cleanup deletes recovery codes that were used more than 30 days ago.
 func (r *MFARepo) Cleanup(ctx context.Context, now time.Time) error {
 	_, err := r.db.Exec(ctx, `
 		DELETE FROM user_mfa_recovery_codes
@@ -124,4 +137,3 @@ func (r *MFARepo) Cleanup(ctx context.Context, now time.Time) error {
 	`, now)
 	return err
 }
-

@@ -16,6 +16,7 @@ type IdentityAdapter struct {
 	repo *postgres.IdentityRepo
 }
 
+// NewIdentityAdapter creates a IdentityAdapter wrapping the given IdentityRepo.
 func NewIdentityAdapter(repo *postgres.IdentityRepo) *IdentityAdapter {
 	return &IdentityAdapter{repo: repo}
 }

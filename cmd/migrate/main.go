@@ -1,3 +1,4 @@
+// Command migrate applies SQL migrations from the migrations/ directory.
 package main
 
 import (
@@ -8,16 +9,21 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/MiraiMagicLab/go-platform-kit/platform/config"
+	"github.com/MiraiMagicLab/go-platform-kit/platform/postgres"
 )
 
 func main() {
 	ctx := context.Background()
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
+	cfg, err := config.Load(config.FromEnv())
+	if err != nil {
+		log.Fatal(err)
+	}
+	if !cfg.Infra.Postgres.IsConfigured() {
 		log.Fatal("DATABASE_URL is required")
 	}
-	pg, err := pgxpool.New(ctx, dbURL)
+
+	pg, err := postgres.Open(ctx, cfg.Infra.Postgres)
 	if err != nil {
 		log.Fatal(err)
 	}

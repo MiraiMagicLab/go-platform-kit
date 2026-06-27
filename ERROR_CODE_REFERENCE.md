@@ -1,7 +1,7 @@
 # Error Code Reference — go-platform-kit
 
 > Canonical reference for the `MPPCCNNN` error code system.  
-> Every backend application that imports `go-platform-kit/v2/pkg/response` MUST follow this specification.
+> Every backend application that imports `go-platform-kit/platform/httpx` MUST follow this specification.
 
 ---
 
@@ -122,7 +122,7 @@ M  PP  CC  NNN
 ### 5.1 Import the response package
 
 ```go
-import "github.com/MiraiMagicLab/go-platform-kit/v2/pkg/response"
+import "github.com/MiraiMagicLab/go-platform-kit/platform/httpx"
 ```
 
 ### 5.2 Return error responses
@@ -154,7 +154,7 @@ const (
 // internal/platform/errors/messages.go
 package errors
 
-import "github.com/MiraiMagicLab/go-platform-kit/v2/pkg/response"
+import "github.com/MiraiMagicLab/go-platform-kit/platform/httpx"
 
 func RegisterDomainMessages() {
     response.RegisterMessages(map[string]string{

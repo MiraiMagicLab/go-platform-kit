@@ -1,4 +1,4 @@
-module github.com/MiraiMagicLab/go-platform-kit/v2
+module github.com/MiraiMagicLab/go-platform-kit
 
 go 1.25.5
 

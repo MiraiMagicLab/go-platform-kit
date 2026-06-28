@@ -1,10 +1,25 @@
 package httpx
 
-// Platform Common error codes (PP=00). These codes are shared across all products
-// and correspond to standard HTTP error categories.
-//
-// Code format: M + 2-digit product (00) + 2-digit category (00) + 3-digit sequence.
-// See ERROR_CODE_REFERENCE.md for the complete specification.
+// ── Success codes (SP=00, CC=00) ────────────────────────────────────────────
+// Format: S + 2-digit product + 2-digit category + 3-digit sequence.
+// Mirror structure of error codes (M-prefix) for consistent client i18n.
+
+const (
+	// CodeSuccess indicates a successful operation.
+	CodeSuccess = "S0000000"
+	// CodeCreated indicates a resource was successfully created.
+	CodeCreated = "S0000001"
+	// CodeUpdated indicates a resource was successfully updated.
+	CodeUpdated = "S0000002"
+	// CodeDeleted indicates a resource was successfully deleted.
+	CodeDeleted = "S0000003"
+	// CodeNoContent indicates a successful operation with no response body.
+	CodeNoContent = "S0000004"
+)
+
+// ── Platform Common error codes (MP=00, CC=00) ──────────────────────────────
+// Format: M + 2-digit product + 2-digit category + 3-digit sequence.
+
 const (
 	// CodeUnknownError is returned when an unexpected error occurs.
 	CodeUnknownError = "M0000000"
@@ -24,7 +39,7 @@ const (
 	CodeInternal = "M0000007"
 )
 
-// ── Auth (PP=00, CC=01) ─────────────────────────────────────────────────
+// ── Auth (MP=00, CC=01) ────────────────────────────────────────────────────
 
 const (
 	// CodeAuthInvalidCredentials indicates the supplied email or password is incorrect.
@@ -61,7 +76,7 @@ const (
 	CodeAuthInvalidMFA = "M0001016"
 )
 
-// ── Session (PP=00, CC=02) ──────────────────────────────────────────────
+// ── Session (MP=00, CC=02) ────────────────────────────────────────────────
 
 const (
 	// CodeSessionNotFound indicates the requested session does not exist or has been revoked.
@@ -70,7 +85,7 @@ const (
 	CodeSessionNoSIDInToken = "M0002002"
 )
 
-// ── RBAC (PP=00, CC=03) ────────────────────────────────────────────────
+// ── RBAC (MP=00, CC=03) ──────────────────────────────────────────────────
 
 const (
 	// CodeRBACCreateRoleFailed indicates role creation could not be completed.
@@ -81,7 +96,7 @@ const (
 	CodeRBACAssignFailed = "M0003003"
 )
 
-// ── MFA (PP=00, CC=04) ─────────────────────────────────────────────────
+// ── MFA (MP=00, CC=04) ───────────────────────────────────────────────────
 
 const (
 	// CodeMFASetupFailed indicates TOTP setup could not be completed.
@@ -92,7 +107,7 @@ const (
 	CodeMFADisableFailed = "M0004003"
 )
 
-// ── OAuth (PP=00, CC=05) ───────────────────────────────────────────────
+// ── OAuth (MP=00, CC=05) ─────────────────────────────────────────────────
 
 const (
 	// CodeOAuthStateInvalid indicates the OAuth CSRF state cookie does not match the callback parameter.

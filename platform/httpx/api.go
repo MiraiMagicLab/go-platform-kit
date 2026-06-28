@@ -16,26 +16,16 @@ type ApiResponse struct {
 	Data    interface{}            `json:"data,omitempty"`
 }
 
+// Success writes a success JSON response.
 func Success(c *gin.Context, status int, code string, data interface{}, params map[string]interface{}) {
 	if code == "" {
-		code = "success"
+		code = CodeSuccess
 	}
 	c.JSON(status, ApiResponse{
 		Success: true,
 		Code:    code,
 		Params:  params,
 		Data:    data,
-	})
-}
-
-func Fail(c *gin.Context, status int, code string, params map[string]interface{}) {
-	if code == "" {
-		code = CodeUnknownError
-	}
-	c.JSON(status, ApiResponse{
-		Success: false,
-		Code:    code,
-		Params:  params,
 	})
 }
 
@@ -49,6 +39,11 @@ func FailCode(c *gin.Context, status int, code string, params map[string]interfa
 		Code:    code,
 		Params:  params,
 	})
+}
+
+// Fail is deprecated. Use [FailCode] instead.
+func Fail(c *gin.Context, status int, code string, params map[string]interface{}) {
+	FailCode(c, status, code, params)
 }
 
 // FailCodeArgs supports positional parameters like "{0}". Params will contain the args.
@@ -95,18 +90,14 @@ type PaginationResult struct {
 
 // Pagination returns a consistent paginated response payload.
 func Pagination(c *gin.Context, status int, records interface{}, limit, offset int, total int64) {
-	c.JSON(status, ApiResponse{
-		Success: true,
-		Code:    "success",
-		Data: PaginationResult{
-			Records: records,
-			Pagination: PaginationMeta{
-				Limit:  limit,
-				Offset: offset,
-				Total:  total,
-			},
+	Success(c, status, CodeSuccess, PaginationResult{
+		Records: records,
+		Pagination: PaginationMeta{
+			Limit:  limit,
+			Offset: offset,
+			Total:  total,
 		},
-	})
+	}, nil)
 }
 
 // CursorPaginationMeta describes cursor-based pagination metadata.
@@ -122,27 +113,23 @@ type CursorPaginationResult struct {
 
 // CursorPagination returns a consistent cursor-based paginated response.
 func CursorPagination(c *gin.Context, status int, records interface{}, nextCursor string, hasMore bool) {
-	c.JSON(status, ApiResponse{
-		Success: true,
-		Code:    "success",
-		Data: CursorPaginationResult{
-			Records: records,
-			Pagination: CursorPaginationMeta{
-				NextCursor: nextCursor,
-				HasMore:    hasMore,
-			},
+	Success(c, status, CodeSuccess, CursorPaginationResult{
+		Records: records,
+		Pagination: CursorPaginationMeta{
+			NextCursor: nextCursor,
+			HasMore:    hasMore,
 		},
-	})
+	}, nil)
 }
 
 // OK returns a 200 success response.
 func OK(c *gin.Context, data interface{}) {
-	Success(c, http.StatusOK, "success", data, nil)
+	Success(c, http.StatusOK, CodeSuccess, data, nil)
 }
 
 // Created returns a 201 success response.
 func Created(c *gin.Context, data interface{}) {
-	Success(c, http.StatusCreated, "success", data, nil)
+	Success(c, http.StatusCreated, CodeCreated, data, nil)
 }
 
 // StatusToErrorCode maps HTTP status into stable codeMessage strings.
@@ -173,7 +160,7 @@ func StatusToErrorCode(status int) string {
 	}
 }
 
-// FailStatus behaves like Fail and attaches a stable code derived from HTTP status.
+// FailStatus behaves like FailCode and attaches a stable code derived from HTTP status.
 func FailStatus(c *gin.Context, status int, params map[string]interface{}) {
 	code := StatusToErrorCode(status)
 	FailCode(c, status, code, params)
@@ -189,16 +176,12 @@ type PaginatingQueryRecord struct {
 
 // PaginateQueryRecord wraps records with {records,current,size,total}.
 func PaginateQueryRecord(c *gin.Context, status int, records interface{}, current, size, total int) {
-	c.JSON(status, ApiResponse{
-		Success: true,
-		Code:    "success",
-		Data: PaginatingQueryRecord{
-			Records: records,
-			Current: current,
-			Size:    size,
-			Total:   total,
-		},
-	})
+	Success(c, status, CodeSuccess, PaginatingQueryRecord{
+		Records: records,
+		Current: current,
+		Size:    size,
+		Total:   total,
+	}, nil)
 }
 
 // ParseLimitOffset reads `limit` + `offset` from query and applies sane bounds.

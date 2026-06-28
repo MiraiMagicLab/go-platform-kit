@@ -1,6 +1,13 @@
 package httpx
 
 var commonMessages = map[string]string{
+	// Success — S0000xxx
+	CodeSuccess:  "Success",
+	CodeCreated:  "Resource created",
+	CodeUpdated:  "Resource updated",
+	CodeDeleted:  "Resource deleted",
+	CodeNoContent: "No content",
+
 	// System — M0000xxx
 	CodeUnknownError: "An unexpected error occurred",
 	CodeBadRequest:   "Invalid request",

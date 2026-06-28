@@ -8,7 +8,7 @@ import (
 type MappedError struct {
 	Status int
 	Code   string
-	Params map[string]any
+	Params map[string]interface{}
 }
 
 // ErrorMapper translates a service-layer error into a [MappedError] when recognized.

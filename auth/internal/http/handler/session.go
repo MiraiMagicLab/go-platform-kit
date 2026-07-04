@@ -9,6 +9,7 @@ import (
 	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/http/middleware"
 	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/usecase/audit"
 	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/usecase/session"
+	apperrors "github.com/MiraiMagicLab/go-platform-kit/platform/errors"
 	"github.com/MiraiMagicLab/go-platform-kit/platform/httpx"
 )
 
@@ -28,12 +29,12 @@ func NewSessionHandler(sessionSvc *session.SessionService, auditSvc *audit.Audit
 func (h *SessionHandler) List(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		httpx.FailCode(c, http.StatusUnauthorized, httpx.CodeUnauthorized, nil)
+		httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeUnauthorized, nil)
 		return
 	}
 	sessions, err := h.sessionSvc.List(c.Request.Context(), userID)
 	if err != nil {
-		httpx.FailCode(c, http.StatusInternalServerError, httpx.CodeInternal, nil)
+		httpx.FailCode(c, http.StatusInternalServerError, apperrors.CodeInternal, nil)
 		return
 	}
 	currentSessionID := middleware.SessionIDFromCtx(c)
@@ -66,22 +67,22 @@ func (h *SessionHandler) List(c *gin.Context) {
 func (h *SessionHandler) RevokeOne(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		httpx.FailCode(c, http.StatusUnauthorized, httpx.CodeUnauthorized, nil)
+		httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeUnauthorized, nil)
 		return
 	}
 	targetID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeBadRequest, nil)
 		return
 	}
 	currentSessionID := middleware.SessionIDFromCtx(c)
 	jti, exp, _ := middleware.AccessTokenMetaFromCtx(c)
 	if err := h.sessionSvc.RevokeSession(c.Request.Context(), userID, targetID, currentSessionID, jti, exp); err != nil {
 		if err == session.ErrSessionNotFound {
-			httpx.FailCode(c, http.StatusNotFound, httpx.CodeNotFound, nil)
+			httpx.FailCode(c, http.StatusNotFound, apperrors.CodeNotFound, nil)
 			return
 		}
-		httpx.FailCode(c, http.StatusInternalServerError, httpx.CodeInternal, nil)
+		httpx.FailCode(c, http.StatusInternalServerError, apperrors.CodeInternal, nil)
 		return
 	}
 	h.auditSvc.Log(c.Request.Context(), &userID, "session.revoke", "success", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"target": targetID.String()})
@@ -93,12 +94,12 @@ func (h *SessionHandler) RevokeOne(c *gin.Context) {
 func (h *SessionHandler) RevokeOthers(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		httpx.FailCode(c, http.StatusUnauthorized, httpx.CodeUnauthorized, nil)
+		httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeUnauthorized, nil)
 		return
 	}
 	keepSessionID := middleware.SessionIDFromCtx(c)
 	if err := h.sessionSvc.RevokeOtherSessions(c.Request.Context(), userID, keepSessionID); err != nil {
-		httpx.FailCode(c, http.StatusInternalServerError, httpx.CodeInternal, nil)
+		httpx.FailCode(c, http.StatusInternalServerError, apperrors.CodeInternal, nil)
 		return
 	}
 	h.auditSvc.Log(c.Request.Context(), &userID, "session.revoke_others", "success", c.ClientIP(), c.Request.UserAgent(), nil)

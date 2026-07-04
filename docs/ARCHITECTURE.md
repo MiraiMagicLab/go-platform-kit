@@ -33,6 +33,7 @@ Both follow the same **public surface rule**: host apps import only the top-leve
 ```
 Host App
   → platform/config, platform/postgres, platform/redis, platform/httpx
+  → platform/errors, platform/pagination, platform/transaction, platform/clock, platform/id
   → auth, admin, (future capabilities)
 
 Capability (auth, admin, ...)
@@ -45,7 +46,9 @@ Capability (auth, admin, ...)
 
 | Package | Role |
 |---------|------|
-| `platform/httpx` | Standard JSON responses, M00xxxx error codes, recovery, pagination, error mapper |
+| `platform/httpx` | Standard JSON envelope (`ApiResponse`), recovery middleware, status helpers (slimmed down — error codes and pagination moved below) |
+| `platform/errors` | M00xxxx error codes, `ErrorMapper` chain, message registry (`RegisterMessages`, `DefaultMessage`) |
+| `platform/pagination` | Limit/offset, page-based, and cursor pagination parsing and response helpers |
 | `platform/log` | Logger interface; default noop |
 | `platform/config` | Infra config loader; opt-in `FromEnv()`, `OpenInfra()` |
 | `platform/postgres` | Open and ping shared pools |
@@ -63,8 +66,10 @@ Capabilities receive **opened** clients/pools from the host. They do not read en
 
 | Concern | Platform | Capability (e.g. auth) |
 |---------|----------|------------------------|
-| JSON envelope + M00 codes | `platform/httpx` | handlers call `httpx.FailCode` |
-| Error mapper chain | `platform/httpx.ErrorMapper` | auth registers `MapAuthError` |
+| JSON envelope | `platform/httpx` | handlers call `httpx.OK`, `httpx.FailCode` |
+| Error codes + message registry | `platform/errors` | capabilities register domain codes via `errors.RegisterMessages` |
+| Error mapper chain | `platform/errors.ErrorMapper` | auth registers `MapAuthError` |
+| Pagination helpers | `platform/pagination` | handlers call `pagination.LimitOffset`, `pagination.Cursor` |
 | Panic recovery middleware | `platform/httpx.Recovery` | host mounts globally |
 | SMTP send | `platform/mail.Mailer` | auth email use case builds verify/reset content |
 | Postgres pool | `platform/postgres` | auth repos implement `ports` |
@@ -186,8 +191,10 @@ See [docs/DEPENDENCY_RULES.md](DEPENDENCY_RULES.md) for complete rules.
 | Capability | Status |
 |------------|--------|
 | auth | Implemented |
-| admin | Implemented |
+| admin | Implemented (experimental/preview) |
 | platform/storage R2 | Implemented (Cloudflare R2 only) |
+| platform/errors | Implemented (split from httpx) |
+| platform/pagination | Implemented (split from httpx) |
 | platform/transaction | Implemented |
 | platform/clock | Implemented |
 | platform/id | Implemented |

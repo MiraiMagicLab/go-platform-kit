@@ -1,11 +1,11 @@
-package httpx
+package errors
 
 var commonMessages = map[string]string{
 	// Success — S0000xxx
-	CodeSuccess:  "Success",
-	CodeCreated:  "Resource created",
-	CodeUpdated:  "Resource updated",
-	CodeDeleted:  "Resource deleted",
+	CodeSuccess:   "Success",
+	CodeCreated:   "Resource created",
+	CodeUpdated:   "Resource updated",
+	CodeDeleted:   "Resource deleted",
 	CodeNoContent: "No content",
 
 	// System — M0000xxx

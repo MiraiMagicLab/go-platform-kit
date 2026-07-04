@@ -11,8 +11,10 @@ import (
 
 	"github.com/MiraiMagicLab/go-platform-kit/auth"
 	"github.com/MiraiMagicLab/go-platform-kit/platform/config"
+	"github.com/MiraiMagicLab/go-platform-kit/platform/errors"
 	"github.com/MiraiMagicLab/go-platform-kit/platform/httpx"
-	"github.com/MiraiMagicLab/go-platform-kit/platform/log"
+	platformlog "github.com/MiraiMagicLab/go-platform-kit/platform/log"
+	"github.com/MiraiMagicLab/go-platform-kit/platform/pagination"
 	"github.com/MiraiMagicLab/go-platform-kit/platform/postgres"
 )
 
@@ -30,14 +32,14 @@ func main() {
 	}
 	defer postgres.Close(pool)
 
-	logger := log.NewSlog(nil)
+	logger := platformlog.NewSlog(nil)
+
+	authCfg := auth.DefaultConfig()
+	auth.ApplyEnv(&authCfg)
+	authCfg.Issuer = cfg.App.Name
 
 	a, err := auth.Open(ctx,
-		auth.WithConfig(auth.Config{
-			JWTAccessSecret:  cfg.Auth.JWTAccessSecret,
-			JWTRefreshSecret: cfg.Auth.JWTRefreshSecret,
-			Issuer:           cfg.App.Name,
-		}),
+		auth.WithConfig(authCfg),
 		auth.WithPostgres(pool),
 		auth.WithLogger(logger),
 	)
@@ -52,12 +54,10 @@ func main() {
 
 	api := r.Group("/api/v1")
 
-	// Health
 	api.GET("/health", func(c *gin.Context) {
 		httpx.OK(c, gin.H{"status": "ok"})
 	})
 
-	// Auth routes — host owns HTTP, calls auth use-case methods
 	authGroup := api.Group("/auth")
 	{
 		authGroup.POST("/register", func(c *gin.Context) {
@@ -66,11 +66,11 @@ func main() {
 				Password string `json:"password" binding:"required,min=8"`
 			}
 			if err := c.ShouldBindJSON(&req); err != nil {
-				httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+				httpx.FailCode(c, http.StatusBadRequest, errors.CodeBadRequest, nil)
 				return
 			}
 			id, err := a.Register(c.Request.Context(), req.Email, req.Password)
-			if auth.WriteError(c, err, httpx.CodeAuthRegisterFailed, http.StatusConflict) {
+			if auth.WriteError(c, err, errors.CodeAuthRegisterFailed, http.StatusConflict) {
 				return
 			}
 			httpx.Created(c, gin.H{"id": id})
@@ -82,13 +82,13 @@ func main() {
 				Password string `json:"password" binding:"required"`
 			}
 			if err := c.ShouldBindJSON(&req); err != nil {
-				httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+				httpx.FailCode(c, http.StatusBadRequest, errors.CodeBadRequest, nil)
 				return
 			}
 			result, err := a.Login(c.Request.Context(), req.Email, req.Password, auth.ClientMeta{
 				IP: c.ClientIP(), UA: c.Request.UserAgent(),
 			})
-			if auth.WriteError(c, err, httpx.CodeAuthInvalidCredentials, http.StatusUnauthorized) {
+			if auth.WriteError(c, err, errors.CodeAuthInvalidCredentials, http.StatusUnauthorized) {
 				return
 			}
 			httpx.OK(c, result)
@@ -99,33 +99,19 @@ func main() {
 				RefreshToken string `json:"refresh_token" binding:"required"`
 			}
 			if err := c.ShouldBindJSON(&req); err != nil {
-				httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+				httpx.FailCode(c, http.StatusBadRequest, errors.CodeBadRequest, nil)
 				return
 			}
 			result, err := a.Refresh(c.Request.Context(), req.RefreshToken, auth.ClientMeta{
 				IP: c.ClientIP(), UA: c.Request.UserAgent(),
 			}, "")
-			if auth.WriteError(c, err, httpx.CodeAuthInvalidRefresh, http.StatusUnauthorized) {
+			if auth.WriteError(c, err, errors.CodeAuthInvalidRefresh, http.StatusUnauthorized) {
 				return
 			}
 			httpx.OK(c, result)
 		})
-
-		authGroup.POST("/logout", func(c *gin.Context) {
-			// Logout requires user ID and session ID from JWT
-			userID, ok := auth.UserIDFromCtx(c)
-			if !ok {
-				httpx.FailCode(c, http.StatusUnauthorized, httpx.CodeUnauthorized, nil)
-				return
-			}
-			sessionID := auth.SessionIDFromCtx(c)
-			jti, exp, _ := auth.AccessTokenMetaFromCtx(c)
-			_ = a.Logout(c.Request.Context(), userID, sessionID, jti, exp)
-			httpx.OK(c, gin.H{"message": "logged out"})
-		})
 	}
 
-	// Protected routes
 	private := api.Group("")
 	private.Use(a.JWTAuth())
 	{
@@ -133,19 +119,25 @@ func main() {
 			userID, _ := auth.UserIDFromCtx(c)
 			profile, err := a.GetProfile(c.Request.Context(), userID)
 			if err != nil {
-				httpx.FailCode(c, http.StatusInternalServerError, httpx.CodeInternal, nil)
+				httpx.FailCode(c, http.StatusInternalServerError, errors.CodeInternal, nil)
 				return
 			}
 			httpx.OK(c, profile)
 		})
 
-		// RBAC example
 		admin := private.Group("/admin")
 		admin.Use(a.RequireRole("admin"))
 		{
 			admin.GET("/users", func(c *gin.Context) {
 				users, total, _ := a.ListUsers(c.Request.Context(), 1, 20, auth.ListUsersFilter{})
-				httpx.Pagination(c, http.StatusOK, users, 20, 0, int64(total))
+				httpx.Success(c, http.StatusOK, errors.CodeSuccess, pagination.Result{
+					Records: users,
+					Pagination: pagination.Meta{
+						Limit:  20,
+						Offset: 0,
+						Total:  int64(total),
+					},
+				}, nil)
 			})
 		}
 	}

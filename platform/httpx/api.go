@@ -3,12 +3,13 @@ package httpx
 import (
 	"fmt"
 	"net/http"
-	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/MiraiMagicLab/go-platform-kit/platform/errors"
 )
 
+// ApiResponse is the standard JSON envelope for all API responses.
 type ApiResponse struct {
 	Success bool                   `json:"success"`
 	Code    string                 `json:"code"`
@@ -19,7 +20,7 @@ type ApiResponse struct {
 // Success writes a success JSON response.
 func Success(c *gin.Context, status int, code string, data interface{}, params map[string]interface{}) {
 	if code == "" {
-		code = CodeSuccess
+		code = errors.CodeSuccess
 	}
 	c.JSON(status, ApiResponse{
 		Success: true,
@@ -32,7 +33,7 @@ func Success(c *gin.Context, status int, code string, data interface{}, params m
 // FailCode returns an error response with stable code for client i18n.
 func FailCode(c *gin.Context, status int, code string, params map[string]interface{}) {
 	if code == "" {
-		code = CodeUnknownError
+		code = errors.CodeUnknownError
 	}
 	c.JSON(status, ApiResponse{
 		Success: false,
@@ -41,16 +42,12 @@ func FailCode(c *gin.Context, status int, code string, params map[string]interfa
 	})
 }
 
-// Fail is deprecated. Use [FailCode] instead.
-func Fail(c *gin.Context, status int, code string, params map[string]interface{}) {
-	FailCode(c, status, code, params)
-}
-
 // FailCodeArgs supports positional parameters like "{0}". Params will contain the args.
 func FailCodeArgs(c *gin.Context, status int, code string, args ...interface{}) {
 	FailCode(c, status, code, BuildParams(args...))
 }
 
+// BuildParams constructs a params map from positional arguments.
 func BuildParams(args ...interface{}) map[string]interface{} {
 	if len(args) == 0 {
 		return nil
@@ -63,100 +60,36 @@ func BuildParams(args ...interface{}) map[string]interface{} {
 	return params
 }
 
-func RenderMessage(template string, args ...interface{}) string {
-	out := template
-	for i, v := range args {
-		out = strings.ReplaceAll(out, fmt.Sprintf("{%d}", i), fmt.Sprint(v))
-	}
-	return out
-}
-
 // FailNotFound responds with 404 and the standard not-found code.
 func FailNotFound(c *gin.Context) {
-	FailCode(c, http.StatusNotFound, CodeNotFound, nil)
+	FailCode(c, http.StatusNotFound, errors.CodeNotFound, nil)
 }
 
-// PaginationMeta describes common limit/offset pagination.
-type PaginationMeta struct {
-	Limit  int   `json:"limit"`
-	Offset int   `json:"offset"`
-	Total  int64 `json:"total"`
-}
-
-type PaginationResult struct {
-	Records    interface{}    `json:"records"`
-	Pagination PaginationMeta `json:"pagination"`
-}
-
-// Pagination returns a consistent paginated response payload.
-func Pagination(c *gin.Context, status int, records interface{}, limit, offset int, total int64) {
-	Success(c, status, CodeSuccess, PaginationResult{
-		Records: records,
-		Pagination: PaginationMeta{
-			Limit:  limit,
-			Offset: offset,
-			Total:  total,
-		},
-	}, nil)
-}
-
-// CursorPaginationMeta describes cursor-based pagination metadata.
-type CursorPaginationMeta struct {
-	NextCursor string `json:"nextCursor" example:"opaque_string"`
-	HasMore    bool   `json:"hasMore"`
-}
-
-type CursorPaginationResult struct {
-	Records    interface{}          `json:"records"`
-	Pagination CursorPaginationMeta `json:"pagination"`
-}
-
-// CursorPagination returns a consistent cursor-based paginated response.
-func CursorPagination(c *gin.Context, status int, records interface{}, nextCursor string, hasMore bool) {
-	Success(c, status, CodeSuccess, CursorPaginationResult{
-		Records: records,
-		Pagination: CursorPaginationMeta{
-			NextCursor: nextCursor,
-			HasMore:    hasMore,
-		},
-	}, nil)
-}
-
-// OK returns a 200 success response.
-func OK(c *gin.Context, data interface{}) {
-	Success(c, http.StatusOK, CodeSuccess, data, nil)
-}
-
-// Created returns a 201 success response.
-func Created(c *gin.Context, data interface{}) {
-	Success(c, http.StatusCreated, CodeCreated, data, nil)
-}
-
-// StatusToErrorCode maps HTTP status into stable codeMessage strings.
+// StatusToErrorCode maps HTTP status into stable code strings.
 func StatusToErrorCode(status int) string {
 	switch status {
 	case http.StatusBadRequest:
-		return CodeBadRequest
+		return errors.CodeBadRequest
 	case http.StatusUnauthorized:
-		return CodeUnauthorized
+		return errors.CodeUnauthorized
 	case http.StatusForbidden:
-		return CodeForbidden
+		return errors.CodeForbidden
 	case http.StatusNotFound:
-		return CodeNotFound
+		return errors.CodeNotFound
 	case http.StatusConflict:
-		return CodeConflict
+		return errors.CodeConflict
 	case http.StatusTooManyRequests:
-		return CodeRateLimited
+		return errors.CodeRateLimited
 	case http.StatusInternalServerError:
-		return CodeInternal
+		return errors.CodeInternal
 	default:
 		if status >= 400 && status < 500 {
-			return CodeBadRequest
+			return errors.CodeBadRequest
 		}
 		if status >= 500 {
-			return CodeInternal
+			return errors.CodeInternal
 		}
-		return CodeUnknownError
+		return errors.CodeUnknownError
 	}
 }
 
@@ -166,87 +99,23 @@ func FailStatus(c *gin.Context, status int, params map[string]interface{}) {
 	FailCode(c, status, code, params)
 }
 
-// PaginatingQueryRecord is the pagination format: {records, current, size, total}.
-type PaginatingQueryRecord struct {
-	Records interface{} `json:"records"`
-	Current int         `json:"current"`
-	Size    int         `json:"size"`
-	Total   int         `json:"total"`
+// OK returns a 200 success response.
+func OK(c *gin.Context, data interface{}) {
+	Success(c, http.StatusOK, errors.CodeSuccess, data, nil)
 }
 
-// PaginateQueryRecord wraps records with {records,current,size,total}.
-func PaginateQueryRecord(c *gin.Context, status int, records interface{}, current, size, total int) {
-	Success(c, status, CodeSuccess, PaginatingQueryRecord{
-		Records: records,
-		Current: current,
-		Size:    size,
-		Total:   total,
-	}, nil)
+// Created returns a 201 success response.
+func Created(c *gin.Context, data interface{}) {
+	Success(c, http.StatusCreated, errors.CodeCreated, data, nil)
 }
 
-// ParseLimitOffset reads `limit` + `offset` from query and applies sane bounds.
-func ParseLimitOffset(c *gin.Context, defaultLimit, maxLimit int) (limit, offset int) {
-	limit = defaultLimit
-	if v := strings.TrimSpace(c.Query("limit")); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			limit = n
-		}
-	}
-	if maxLimit > 0 && limit > maxLimit {
-		limit = maxLimit
-	}
-
-	offset = 0
-	if v := strings.TrimSpace(c.Query("offset")); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
-			offset = n
-		}
-	}
-	return limit, offset
-}
-
-// ParsePaginationParams reads either (current,size) or legacy (limit,offset).
-func ParsePaginationParams(c *gin.Context, defaultCurrent, defaultSize, maxSize int, defaultLimit, maxLimit int) (current, size, limit, offset int) {
-	curRaw := strings.TrimSpace(c.Query("current"))
-	sizeRaw := strings.TrimSpace(c.Query("size"))
-	if curRaw != "" && sizeRaw != "" {
-		cur, err1 := strconv.Atoi(curRaw)
-		sz, err2 := strconv.Atoi(sizeRaw)
-		if err1 == nil && err2 == nil && cur > 0 && sz > 0 {
-			if maxSize > 0 && sz > maxSize {
-				sz = maxSize
-			}
-			current = cur
-			size = sz
-			limit = sz
-			offset = (current - 1) * size
-			return
-		}
-	}
-
-	limit, offset = ParseLimitOffset(c, defaultLimit, maxLimit)
-	if limit <= 0 {
-		limit = defaultLimit
-	}
-	if offset < 0 {
-		offset = 0
-	}
-	size = limit
-	current = offset/limit + 1
-	return
-}
-
-// ParseCursor reads `cursor` and `limit` from query params.
-func ParseCursor(c *gin.Context, defaultLimit, maxLimit int) (cursor string, limit int) {
-	cursor = strings.TrimSpace(c.Query("cursor"))
-	limit = defaultLimit
-	if v := strings.TrimSpace(c.Query("limit")); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			limit = n
-		}
-	}
-	if maxLimit > 0 && limit > maxLimit {
-		limit = maxLimit
-	}
-	return cursor, limit
+// WriteError writes a mapped error response, or a fallback code when no mapper matches.
+// Returns true when a response was written.
+func WriteError(c *gin.Context, err error, fallbackCode string, fallbackStatus int, mappers ...errors.ErrorMapper) bool {
+	return errors.WriteError(
+		func(status int, code string, params map[string]interface{}) {
+			FailCode(c, status, code, params)
+		},
+		err, fallbackCode, fallbackStatus, mappers...,
+	)
 }

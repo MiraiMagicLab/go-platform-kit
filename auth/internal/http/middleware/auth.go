@@ -12,6 +12,7 @@ import (
 	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/domain"
 	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/ports"
 	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/security/jwt"
+	apperrors "github.com/MiraiMagicLab/go-platform-kit/platform/errors"
 	"github.com/MiraiMagicLab/go-platform-kit/platform/httpx"
 )
 
@@ -80,7 +81,7 @@ func JWTAuth(jwtm *jwt.Manager, users ports.UserRepository, denylist ports.Acces
 	return func(c *gin.Context) {
 		h := c.GetHeader("Authorization")
 		if h == "" || !strings.HasPrefix(h, "Bearer ") {
-			httpx.FailCode(c, http.StatusUnauthorized, httpx.CodeUnauthorized, nil)
+			httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeUnauthorized, nil)
 			c.Abort()
 			return
 		}
@@ -89,9 +90,9 @@ func JWTAuth(jwtm *jwt.Manager, users ports.UserRepository, denylist ports.Acces
 		claims, err := jwtm.ParseAccess(raw)
 		if err != nil {
 			if jwt.IsExpired(err) {
-				httpx.FailCode(c, http.StatusUnauthorized, httpx.CodeAuthTokenExpired, nil)
+				httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeAuthTokenExpired, nil)
 			} else {
-				httpx.FailCode(c, http.StatusUnauthorized, httpx.CodeAuthTokenInvalid, nil)
+				httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeAuthTokenInvalid, nil)
 			}
 			c.Abort()
 			return
@@ -99,14 +100,14 @@ func JWTAuth(jwtm *jwt.Manager, users ports.UserRepository, denylist ports.Acces
 
 		userID, err := uuid.Parse(claims.Subject)
 		if err != nil {
-			httpx.FailCode(c, http.StatusUnauthorized, httpx.CodeAuthTokenInvalid, nil)
+			httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeAuthTokenInvalid, nil)
 			c.Abort()
 			return
 		}
 
 		if denylist != nil {
 			if denied, _ := denylist.IsDenied(c.Request.Context(), claims.ID); denied {
-				httpx.FailCode(c, http.StatusUnauthorized, httpx.CodeAuthTokenRevoked, nil)
+				httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeAuthTokenRevoked, nil)
 				c.Abort()
 				return
 			}
@@ -114,26 +115,26 @@ func JWTAuth(jwtm *jwt.Manager, users ports.UserRepository, denylist ports.Acces
 
 		u, err := loadUserForAuth(c.Request.Context(), users, userCache, userID)
 		if err != nil || u.TokenVersion != claims.TokenVersion {
-			httpx.FailCode(c, http.StatusUnauthorized, httpx.CodeAuthTokenRevoked, nil)
+			httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeAuthTokenRevoked, nil)
 			c.Abort()
 			return
 		}
 		if u.IsBanned() {
-			httpx.Fail(c, http.StatusForbidden, httpx.CodeAuthUserBanned, map[string]interface{}{
+			httpx.FailCode(c, http.StatusForbidden, apperrors.CodeAuthUserBanned, map[string]interface{}{
 				"banned_until": u.BannedUntil.UTC().Format("2006-01-02T15:04:05Z"),
 			})
 			c.Abort()
 			return
 		}
 		if u.IsLocked() {
-			httpx.Fail(c, http.StatusForbidden, httpx.CodeAuthAccountLocked, map[string]interface{}{
+			httpx.FailCode(c, http.StatusForbidden, apperrors.CodeAuthAccountLocked, map[string]interface{}{
 				"locked_until": u.LockedUntil.UTC().Format("2006-01-02T15:04:05Z"),
 			})
 			c.Abort()
 			return
 		}
 		if u.IsDeleted() {
-			httpx.Fail(c, http.StatusUnauthorized, httpx.CodeUnauthorized, nil)
+			httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeUnauthorized, nil)
 			c.Abort()
 			return
 		}

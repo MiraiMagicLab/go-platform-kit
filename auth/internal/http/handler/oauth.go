@@ -13,6 +13,7 @@ import (
 	oauthuc "github.com/MiraiMagicLab/go-platform-kit/auth/internal/usecase/oauth"
 	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/usecase/rbac"
 	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/validate"
+	apperrors "github.com/MiraiMagicLab/go-platform-kit/platform/errors"
 	"github.com/MiraiMagicLab/go-platform-kit/platform/httpx"
 )
 
@@ -54,18 +55,18 @@ func NewOAuthHandler(
 // Login handles GET /oauth/google/login.
 func (h *OAuthHandler) Login(c *gin.Context) {
 	if err := h.requireGoogleProvider(c.Param("provider")); err != nil {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeOAuthNotConfigured, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeOAuthNotConfigured, nil)
 		return
 	}
 	if !h.oauthSvc.GoogleConfigured() {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeOAuthNotConfigured, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeOAuthNotConfigured, nil)
 		return
 	}
 
 	state := uuid.New().String()
 	authURL, err := h.oauthSvc.AuthCodeURL(oauthuc.ProviderGoogle, state)
 	if err != nil {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeOAuthNotConfigured, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeOAuthNotConfigured, nil)
 		return
 	}
 	validate.SetOAuthStateCookie(c, oauthStateCookieName(), state, h.cookiePath, h.cookieSecure)
@@ -75,7 +76,7 @@ func (h *OAuthHandler) Login(c *gin.Context) {
 // Callback handles GET /oauth/google/callback.
 func (h *OAuthHandler) Callback(c *gin.Context) {
 	if err := h.requireGoogleProvider(c.Param("provider")); err != nil {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeOAuthNotConfigured, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeOAuthNotConfigured, nil)
 		return
 	}
 	if errMsg := c.Query("error"); errMsg != "" {
@@ -86,12 +87,12 @@ func (h *OAuthHandler) Callback(c *gin.Context) {
 	state := c.Query("state")
 	code := c.Query("code")
 	if code == "" {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeBadRequest, nil)
 		return
 	}
 	savedState, err := c.Cookie(oauthStateCookieName())
 	if err != nil || savedState != state {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeOAuthStateInvalid, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeOAuthStateInvalid, nil)
 		return
 	}
 	validate.ClearOAuthStateCookie(c, oauthStateCookieName(), h.cookiePath, h.cookieSecure)
@@ -101,7 +102,7 @@ func (h *OAuthHandler) Callback(c *gin.Context) {
 		if writeOAuthExchangeError(c, err) {
 			return
 		}
-		httpx.FailCode(c, http.StatusInternalServerError, httpx.CodeOAuthUserFail, nil)
+		httpx.FailCode(c, http.StatusInternalServerError, apperrors.CodeOAuthUserFail, nil)
 		return
 	}
 
@@ -116,17 +117,17 @@ type oauthExchangeReq struct {
 // Exchange handles POST /oauth/google/exchange for SPA/mobile clients that receive the auth code directly.
 func (h *OAuthHandler) Exchange(c *gin.Context) {
 	if err := h.requireGoogleProvider(c.Param("provider")); err != nil {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeOAuthNotConfigured, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeOAuthNotConfigured, nil)
 		return
 	}
 	var req oauthExchangeReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeBadRequest, nil)
 		return
 	}
 	savedState, err := c.Cookie(oauthStateCookieName())
 	if err != nil || savedState == "" {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeOAuthStateInvalid, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeOAuthStateInvalid, nil)
 		return
 	}
 	validate.ClearOAuthStateCookie(c, oauthStateCookieName(), h.cookiePath, h.cookieSecure)
@@ -136,7 +137,7 @@ func (h *OAuthHandler) Exchange(c *gin.Context) {
 		if writeOAuthExchangeError(c, err) {
 			return
 		}
-		httpx.FailCode(c, http.StatusInternalServerError, httpx.CodeOAuthUserFail, nil)
+		httpx.FailCode(c, http.StatusInternalServerError, apperrors.CodeOAuthUserFail, nil)
 		return
 	}
 
@@ -195,21 +196,21 @@ func (h *OAuthHandler) redirectOAuthError(c *gin.Context, providerError string) 
 func writeOAuthExchangeError(c *gin.Context, err error) bool {
 	switch {
 	case err == oauthuc.ErrOAuthNotConfigured, err == oauthuc.ErrUnsupportedProvider:
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeOAuthNotConfigured, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeOAuthNotConfigured, nil)
 		return true
 	case err == oauthuc.ErrGoogleEmailNotVerified:
-		httpx.FailCode(c, http.StatusForbidden, httpx.CodeAuthEmailNotVerified, nil)
+		httpx.FailCode(c, http.StatusForbidden, apperrors.CodeAuthEmailNotVerified, nil)
 		return true
 	case err == oauthuc.ErrGoogleEmailMissing:
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeOAuthExchangeFail, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeOAuthExchangeFail, nil)
 		return true
 	default:
 		if _, ok := err.(domain.ErrEmailNotVerified); ok {
-			httpx.FailCode(c, http.StatusForbidden, httpx.CodeAuthEmailNotVerified, nil)
+			httpx.FailCode(c, http.StatusForbidden, apperrors.CodeAuthEmailNotVerified, nil)
 			return true
 		}
 		if isOAuthExchangeFailure(err) {
-			httpx.FailCode(c, http.StatusBadGateway, httpx.CodeOAuthExchangeFail, nil)
+			httpx.FailCode(c, http.StatusBadGateway, apperrors.CodeOAuthExchangeFail, nil)
 			return true
 		}
 	}

@@ -10,14 +10,14 @@ import (
 	"github.com/MiraiMagicLab/go-platform-kit/platform/storage"
 )
 
-func TestFromEnvGoogleOAuthKeys(t *testing.T) {
-	t.Setenv("GOOGLE_CLIENT_ID", "gid")
-	t.Setenv("GOOGLE_CLIENT_SECRET", "gsecret")
-	t.Setenv("PUBLIC_BASE_URL", "http://localhost:8080")
+func TestFromEnvAppConfig(t *testing.T) {
+	t.Setenv("APP_NAME", "my-service")
+	t.Setenv("PORT", "3000")
+	t.Setenv("APP_ENV", "staging")
 	cfg := config.FromEnv()
-	require.Equal(t, "gid", cfg.Auth.GoogleClientID)
-	require.Equal(t, "gsecret", cfg.Auth.GoogleClientSecret)
-	require.Equal(t, "http://localhost:8080", cfg.Auth.PublicBaseURL)
+	require.Equal(t, "my-service", cfg.App.Name)
+	require.Equal(t, "3000", cfg.App.Port)
+	require.Equal(t, "staging", cfg.App.Env)
 }
 
 func TestFromEnvR2Keys(t *testing.T) {

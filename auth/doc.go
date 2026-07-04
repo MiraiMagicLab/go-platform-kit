@@ -13,7 +13,7 @@
 //
 //	r.POST("/v1/sign-in", func(c *gin.Context) {
 //	    res, err := a.Login(c.Request.Context(), email, password, auth.ClientMeta{IP: c.ClientIP(), UA: c.Request.UserAgent()})
-//	    if auth.WriteError(c, err, httpx.CodeAuthInvalidCredentials, 401) {
+//	    if auth.WriteError(c, err, errors.CodeAuthInvalidCredentials, 401) {
 //	        return
 //	    }
 //	    httpx.Success(c, 200, "success", res, nil)

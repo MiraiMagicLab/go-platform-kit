@@ -8,21 +8,22 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/domain"
+	apperrors "github.com/MiraiMagicLab/go-platform-kit/platform/errors"
 	"github.com/MiraiMagicLab/go-platform-kit/platform/httpx"
 )
 
 // MapError translates auth domain errors into stable HTTP error codes.
-func MapError(err error) (httpx.MappedError, bool) {
+func MapError(err error) (apperrors.MappedError, bool) {
 	if err == nil {
-		return httpx.MappedError{}, false
+		return apperrors.MappedError{}, false
 	}
 	switch {
 	case errors.Is(err, domain.ErrInvalidCredentials):
-		return httpx.MappedError{Status: http.StatusUnauthorized, Code: httpx.CodeAuthInvalidCredentials}, true
+		return apperrors.MappedError{Status: http.StatusUnauthorized, Code: apperrors.CodeAuthInvalidCredentials}, true
 	case errors.Is(err, domain.ErrInvalidRefresh):
-		return httpx.MappedError{Status: http.StatusUnauthorized, Code: httpx.CodeAuthInvalidRefresh}, true
+		return apperrors.MappedError{Status: http.StatusUnauthorized, Code: apperrors.CodeAuthInvalidRefresh}, true
 	case errors.Is(err, domain.ErrSessionNotFound):
-		return httpx.MappedError{Status: http.StatusNotFound, Code: httpx.CodeSessionNotFound}, true
+		return apperrors.MappedError{Status: http.StatusNotFound, Code: apperrors.CodeSessionNotFound}, true
 	}
 	var locked domain.ErrAccountLocked
 	if errors.As(err, &locked) {
@@ -30,7 +31,7 @@ func MapError(err error) (httpx.MappedError, bool) {
 		if locked.Until != nil {
 			params["locked_until"] = locked.Until.UTC().Format(time.RFC3339)
 		}
-		return httpx.MappedError{Status: http.StatusLocked, Code: httpx.CodeAuthAccountLocked, Params: params}, true
+		return apperrors.MappedError{Status: http.StatusLocked, Code: apperrors.CodeAuthAccountLocked, Params: params}, true
 	}
 	var banned domain.ErrUserBanned
 	if errors.As(err, &banned) {
@@ -41,13 +42,13 @@ func MapError(err error) (httpx.MappedError, bool) {
 		if banned.Reason != nil {
 			params["reason"] = *banned.Reason
 		}
-		return httpx.MappedError{Status: http.StatusForbidden, Code: httpx.CodeAuthUserBanned, Params: params}, true
+		return apperrors.MappedError{Status: http.StatusForbidden, Code: apperrors.CodeAuthUserBanned, Params: params}, true
 	}
 	var notVerified domain.ErrEmailNotVerified
 	if errors.As(err, &notVerified) {
-		return httpx.MappedError{Status: http.StatusForbidden, Code: httpx.CodeAuthEmailNotVerified}, true
+		return apperrors.MappedError{Status: http.StatusForbidden, Code: apperrors.CodeAuthEmailNotVerified}, true
 	}
-	return httpx.MappedError{}, false
+	return apperrors.MappedError{}, false
 }
 
 // WriteError writes a mapped auth error or a fallback response. Returns true when written.

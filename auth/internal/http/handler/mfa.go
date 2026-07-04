@@ -9,6 +9,7 @@ import (
 	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/http/middleware"
 	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/usecase/audit"
 	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/usecase/mfa"
+	apperrors "github.com/MiraiMagicLab/go-platform-kit/platform/errors"
 	"github.com/MiraiMagicLab/go-platform-kit/platform/httpx"
 )
 
@@ -26,17 +27,17 @@ func NewMFAHandler(mfaSvc *mfa.MFAService, auditSvc *audit.AuditService, users p
 func (h *MFAHandler) Setup(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		httpx.FailCode(c, http.StatusUnauthorized, httpx.CodeUnauthorized, nil)
+		httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeUnauthorized, nil)
 		return
 	}
 	u, err := h.users.GetByID(c.Request.Context(), userID)
 	if err != nil {
-		httpx.FailCode(c, http.StatusUnauthorized, httpx.CodeUnauthorized, nil)
+		httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeUnauthorized, nil)
 		return
 	}
 	setup, err := h.mfaSvc.SetupTOTP(c.Request.Context(), userID, u.Email)
 	if err != nil {
-		httpx.FailCode(c, http.StatusInternalServerError, httpx.CodeMFASetupFailed, nil)
+		httpx.FailCode(c, http.StatusInternalServerError, apperrors.CodeMFASetupFailed, nil)
 		return
 	}
 	h.auditSvc.Log(c.Request.Context(), &userID, "mfa.setup", "success", c.ClientIP(), c.Request.UserAgent(), nil)
@@ -50,16 +51,16 @@ type enableMFAReq struct {
 func (h *MFAHandler) Enable(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		httpx.FailCode(c, http.StatusUnauthorized, httpx.CodeUnauthorized, nil)
+		httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeUnauthorized, nil)
 		return
 	}
 	var req enableMFAReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeBadRequest, nil)
 		return
 	}
 	if err := h.mfaSvc.EnableTOTP(c.Request.Context(), userID, req.Code); err != nil {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeMFAEnableFailed, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeMFAEnableFailed, nil)
 		h.auditSvc.Log(c.Request.Context(), &userID, "mfa.enable", "failed", c.ClientIP(), c.Request.UserAgent(), nil)
 		return
 	}
@@ -75,20 +76,20 @@ type disableMFAReq struct {
 func (h *MFAHandler) Disable(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		httpx.FailCode(c, http.StatusUnauthorized, httpx.CodeUnauthorized, nil)
+		httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeUnauthorized, nil)
 		return
 	}
 	var req disableMFAReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeBadRequest, nil)
 		return
 	}
 	if req.Password == "" && req.Code == "" {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeMFADisableFailed, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeMFADisableFailed, nil)
 		return
 	}
 	if err := h.mfaSvc.Disable(c.Request.Context(), userID); err != nil {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeMFADisableFailed, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeMFADisableFailed, nil)
 		h.auditSvc.Log(c.Request.Context(), &userID, "mfa.disable", "failed", c.ClientIP(), c.Request.UserAgent(), nil)
 		return
 	}

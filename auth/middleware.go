@@ -8,6 +8,7 @@ import (
 	"time"
 
 	httpmw "github.com/MiraiMagicLab/go-platform-kit/auth/internal/http/middleware"
+	apperrors "github.com/MiraiMagicLab/go-platform-kit/platform/errors"
 	"github.com/MiraiMagicLab/go-platform-kit/platform/httpx"
 )
 
@@ -108,7 +109,7 @@ func (a *Auth) RequireAccess(values ...string) gin.HandlerFunc {
 	case AuthZRbac:
 		if len(values) == 0 {
 			return func(c *gin.Context) {
-				httpx.FailCode(c, http.StatusForbidden, httpx.CodeForbidden, nil)
+				httpx.FailCode(c, http.StatusForbidden, apperrors.CodeForbidden, nil)
 				c.Abort()
 			}
 		}

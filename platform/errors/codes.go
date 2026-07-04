@@ -1,4 +1,4 @@
-package httpx
+package errors
 
 // ── Success codes (SP=00, CC=00) ────────────────────────────────────────────
 // Format: S + 2-digit product + 2-digit category + 3-digit sequence.

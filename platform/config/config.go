@@ -12,6 +12,13 @@ import (
 	"github.com/MiraiMagicLab/go-platform-kit/platform/storage"
 )
 
+// AppConfig holds application-level metadata loaded from the environment.
+type AppConfig struct {
+	Name string
+	Port string
+	Env  string
+}
+
 // Infra groups shared infrastructure settings opened once per application.
 type Infra struct {
 	Postgres postgres.Config
@@ -20,22 +27,10 @@ type Infra struct {
 	Mail     mail.Config
 }
 
-// Auth holds cross-cutting auth secrets commonly loaded from environment.
-type Auth struct {
-	JWTAccessSecret      string
-	JWTRefreshSecret     string
-	DataEncryptionKeyB64 string
-	GoogleClientID       string
-	GoogleClientSecret   string
-	GoogleRedirectURL    string
-	PublicBaseURL        string
-	FrontendBaseURL      string
-}
-
 // Config is the top-level infrastructure configuration for a backend app.
 type Config struct {
+	App   AppConfig
 	Infra Infra
-	Auth  Auth
 }
 
 // Validate checks configured infrastructure sections.
@@ -88,6 +83,11 @@ func FromEnv() Config {
 	}
 
 	return Config{
+		App: AppConfig{
+			Name: envOr("APP_NAME", "app"),
+			Port: envOr("PORT", "8080"),
+			Env:  envOr("APP_ENV", "development"),
+		},
 		Infra: Infra{
 			Postgres: postgres.Config{URL: os.Getenv("DATABASE_URL")},
 			Redis:    redisCfg,
@@ -99,16 +99,6 @@ func FromEnv() Config {
 				Pass: os.Getenv("SMTP_PASS"),
 				From: os.Getenv("SMTP_FROM"),
 			},
-		},
-		Auth: Auth{
-			JWTAccessSecret:      os.Getenv("JWT_ACCESS_SECRET"),
-			JWTRefreshSecret:     os.Getenv("JWT_REFRESH_SECRET"),
-			DataEncryptionKeyB64: os.Getenv("DATA_ENCRYPTION_KEY_B64"),
-			GoogleClientID:       strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_ID")),
-			GoogleClientSecret:   strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_SECRET")),
-			GoogleRedirectURL:    strings.TrimSpace(os.Getenv("GOOGLE_REDIRECT_URL")),
-			PublicBaseURL:        strings.TrimSpace(os.Getenv("PUBLIC_BASE_URL")),
-			FrontendBaseURL:      strings.TrimSpace(os.Getenv("FRONTEND_BASE_URL")),
 		},
 	}
 }

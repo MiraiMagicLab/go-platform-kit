@@ -12,6 +12,7 @@ import (
 	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/usecase/email"
 	login "github.com/MiraiMagicLab/go-platform-kit/auth/internal/usecase/login"
 	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/usecase/rbac"
+	apperrors "github.com/MiraiMagicLab/go-platform-kit/platform/errors"
 	"github.com/MiraiMagicLab/go-platform-kit/platform/httpx"
 )
 
@@ -72,31 +73,31 @@ type registerReq struct {
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req registerReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.SetAuthErrorCode(c, httpx.CodeBadRequest)
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+		middleware.SetAuthErrorCode(c, apperrors.CodeBadRequest)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeBadRequest, nil)
 		return
 	}
 	if !h.emailValidate(req.Email) {
-		middleware.SetAuthErrorCode(c, httpx.CodeAuthInvalidEmail)
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeAuthInvalidEmail, nil)
+		middleware.SetAuthErrorCode(c, apperrors.CodeAuthInvalidEmail)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeAuthInvalidEmail, nil)
 		return
 	}
 	if len(req.Password) < 8 {
-		middleware.SetAuthErrorCode(c, httpx.CodeAuthInvalidPassword)
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeAuthInvalidPassword, nil)
+		middleware.SetAuthErrorCode(c, apperrors.CodeAuthInvalidPassword)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeAuthInvalidPassword, nil)
 		return
 	}
 	id, err := h.auth.Register(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
-		middleware.SetAuthErrorCode(c, httpx.CodeAuthRegisterFailed)
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeAuthRegisterFailed, nil)
+		middleware.SetAuthErrorCode(c, apperrors.CodeAuthRegisterFailed)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeAuthRegisterFailed, nil)
 		h.auditSvc.Log(c.Request.Context(), nil, "auth.register", "failed", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"email": req.Email})
 		return
 	}
 	if h.defaultRegisterRole != "" && h.rbacSvc != nil {
 		if assignErr := h.rbacSvc.AssignRoleByName(c.Request.Context(), id, h.defaultRegisterRole); assignErr != nil {
-			middleware.SetAuthErrorCode(c, httpx.CodeAuthRegisterFailed)
-			httpx.FailCode(c, http.StatusBadRequest, httpx.CodeAuthRegisterFailed, nil)
+			middleware.SetAuthErrorCode(c, apperrors.CodeAuthRegisterFailed)
+			httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeAuthRegisterFailed, nil)
 			return
 		}
 	}
@@ -117,8 +118,8 @@ type loginReq struct {
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req loginReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.SetAuthErrorCode(c, httpx.CodeBadRequest)
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+		middleware.SetAuthErrorCode(c, apperrors.CodeBadRequest)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeBadRequest, nil)
 		return
 	}
 	res, err := h.auth.Login(c.Request.Context(), req.Email, req.Password, domain.ClientMeta{
@@ -128,14 +129,14 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	if err != nil {
 		if mapped, ok := MapAuthError(err); ok {
 			middleware.SetAuthErrorCode(c, mapped.Code)
-			httpx.Fail(c, mapped.Status, mapped.Code, mapped.Params)
-			if mapped.Code == httpx.CodeAuthEmailNotVerified || mapped.Code == httpx.CodeAuthInvalidCredentials {
+			httpx.FailCode(c, mapped.Status, mapped.Code, mapped.Params)
+			if mapped.Code == apperrors.CodeAuthEmailNotVerified || mapped.Code == apperrors.CodeAuthInvalidCredentials {
 				h.auditSvc.Log(c.Request.Context(), nil, "auth.login", "failed", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"email": req.Email})
 			}
 			return
 		}
-		middleware.SetAuthErrorCode(c, httpx.CodeAuthInvalidCredentials)
-		httpx.FailCode(c, http.StatusUnauthorized, httpx.CodeAuthInvalidCredentials, nil)
+		middleware.SetAuthErrorCode(c, apperrors.CodeAuthInvalidCredentials)
+		httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeAuthInvalidCredentials, nil)
 		h.auditSvc.Log(c.Request.Context(), nil, "auth.login", "failed", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"email": req.Email})
 		return
 	}
@@ -154,8 +155,8 @@ type refreshReq struct {
 func (h *AuthHandler) Refresh(c *gin.Context) {
 	var req refreshReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.SetAuthErrorCode(c, httpx.CodeBadRequest)
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+		middleware.SetAuthErrorCode(c, apperrors.CodeBadRequest)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeBadRequest, nil)
 		return
 	}
 	res, err := h.auth.Refresh(c.Request.Context(), req.RefreshToken, domain.ClientMeta{
@@ -163,8 +164,8 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		UA: c.Request.UserAgent(),
 	}, "")
 	if err != nil {
-		middleware.SetAuthErrorCode(c, httpx.CodeAuthInvalidRefresh)
-		httpx.FailCode(c, http.StatusUnauthorized, httpx.CodeAuthInvalidRefresh, nil)
+		middleware.SetAuthErrorCode(c, apperrors.CodeAuthInvalidRefresh)
+		httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeAuthInvalidRefresh, nil)
 		return
 	}
 	h.auditSvc.Log(c.Request.Context(), &res.UserID, "auth.refresh", "success", c.ClientIP(), c.Request.UserAgent(), nil)
@@ -181,8 +182,8 @@ type completeMFAReq struct {
 func (h *AuthHandler) CompleteMFA(c *gin.Context) {
 	var req completeMFAReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.SetAuthErrorCode(c, httpx.CodeBadRequest)
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+		middleware.SetAuthErrorCode(c, apperrors.CodeBadRequest)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeBadRequest, nil)
 		return
 	}
 	res, err := h.auth.CompleteMFA(c.Request.Context(), req.MFAToken, req.Code, domain.ClientMeta{
@@ -190,8 +191,8 @@ func (h *AuthHandler) CompleteMFA(c *gin.Context) {
 		UA: c.Request.UserAgent(),
 	})
 	if err != nil {
-		middleware.SetAuthErrorCode(c, httpx.CodeAuthInvalidMFA)
-		httpx.FailCode(c, http.StatusUnauthorized, httpx.CodeAuthInvalidMFA, nil)
+		middleware.SetAuthErrorCode(c, apperrors.CodeAuthInvalidMFA)
+		httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeAuthInvalidMFA, nil)
 		return
 	}
 	h.auditSvc.Log(c.Request.Context(), &res.UserID, "auth.mfa_complete", "success", c.ClientIP(), c.Request.UserAgent(), nil)
@@ -204,19 +205,19 @@ func (h *AuthHandler) CompleteMFA(c *gin.Context) {
 func (h *AuthHandler) Logout(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		middleware.SetAuthErrorCode(c, httpx.CodeUnauthorized)
-		httpx.FailCode(c, http.StatusUnauthorized, httpx.CodeUnauthorized, nil)
+		middleware.SetAuthErrorCode(c, apperrors.CodeUnauthorized)
+		httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeUnauthorized, nil)
 		return
 	}
 	jti, exp, ok := middleware.AccessTokenMetaFromCtx(c)
 	if !ok {
-		middleware.SetAuthErrorCode(c, httpx.CodeUnauthorized)
-		httpx.FailCode(c, http.StatusUnauthorized, httpx.CodeUnauthorized, nil)
+		middleware.SetAuthErrorCode(c, apperrors.CodeUnauthorized)
+		httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeUnauthorized, nil)
 		return
 	}
 	if err := h.auth.Logout(c.Request.Context(), userID, middleware.SessionIDFromCtx(c), jti, exp); err != nil {
-		middleware.SetAuthErrorCode(c, httpx.CodeAuthLogoutFailed)
-		httpx.FailCode(c, http.StatusInternalServerError, httpx.CodeAuthLogoutFailed, nil)
+		middleware.SetAuthErrorCode(c, apperrors.CodeAuthLogoutFailed)
+		httpx.FailCode(c, http.StatusInternalServerError, apperrors.CodeAuthLogoutFailed, nil)
 		return
 	}
 	h.auditSvc.Log(c.Request.Context(), &userID, "auth.logout", "success", c.ClientIP(), c.Request.UserAgent(), nil)
@@ -227,15 +228,15 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 func (h *AuthHandler) Me(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		middleware.SetAuthErrorCode(c, httpx.CodeUnauthorized)
-		httpx.FailCode(c, http.StatusUnauthorized, httpx.CodeUnauthorized, nil)
+		middleware.SetAuthErrorCode(c, apperrors.CodeUnauthorized)
+		httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeUnauthorized, nil)
 		return
 	}
 
 	u, err := h.users.GetByID(c.Request.Context(), userID)
 	if err != nil {
-		middleware.SetAuthErrorCode(c, httpx.CodeUnauthorized)
-		httpx.FailCode(c, http.StatusUnauthorized, httpx.CodeUnauthorized, nil)
+		middleware.SetAuthErrorCode(c, apperrors.CodeUnauthorized)
+		httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeUnauthorized, nil)
 		return
 	}
 
@@ -255,13 +256,13 @@ func (h *AuthHandler) Me(c *gin.Context) {
 func (h *AuthHandler) RequestVerifyEmail(c *gin.Context) {
 	userID, ok := middleware.UserIDFromCtx(c)
 	if !ok {
-		middleware.SetAuthErrorCode(c, httpx.CodeUnauthorized)
-		httpx.FailCode(c, http.StatusUnauthorized, httpx.CodeUnauthorized, nil)
+		middleware.SetAuthErrorCode(c, apperrors.CodeUnauthorized)
+		httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeUnauthorized, nil)
 		return
 	}
 	if h.emailSvc == nil || h.emailSvc.RequestVerifyEmail(c.Request.Context(), userID) != nil {
-		middleware.SetAuthErrorCode(c, httpx.CodeAuthEmailSendFailed)
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeAuthEmailSendFailed, nil)
+		middleware.SetAuthErrorCode(c, apperrors.CodeAuthEmailSendFailed)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeAuthEmailSendFailed, nil)
 		h.auditSvc.Log(c.Request.Context(), &userID, "auth.email_verify_request", "failed", c.ClientIP(), c.Request.UserAgent(), nil)
 		return
 	}
@@ -278,13 +279,13 @@ type confirmTokenReq struct {
 func (h *AuthHandler) ConfirmVerifyEmail(c *gin.Context) {
 	var req confirmTokenReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.SetAuthErrorCode(c, httpx.CodeBadRequest)
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+		middleware.SetAuthErrorCode(c, apperrors.CodeBadRequest)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeBadRequest, nil)
 		return
 	}
 	if h.emailSvc == nil || h.emailSvc.ConfirmVerifyEmail(c.Request.Context(), req.Token) != nil {
-		middleware.SetAuthErrorCode(c, httpx.CodeAuthInvalidActionToken)
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeAuthInvalidActionToken, nil)
+		middleware.SetAuthErrorCode(c, apperrors.CodeAuthInvalidActionToken)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeAuthInvalidActionToken, nil)
 		h.auditSvc.Log(c.Request.Context(), nil, "auth.email_verify_confirm", "failed", c.ClientIP(), c.Request.UserAgent(), nil)
 		return
 	}
@@ -301,13 +302,13 @@ type forgotPasswordReq struct {
 func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 	var req forgotPasswordReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.SetAuthErrorCode(c, httpx.CodeBadRequest)
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+		middleware.SetAuthErrorCode(c, apperrors.CodeBadRequest)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeBadRequest, nil)
 		return
 	}
 	if h.emailSvc == nil || h.emailSvc.ForgotPassword(c.Request.Context(), req.Email) != nil {
-		middleware.SetAuthErrorCode(c, httpx.CodeAuthEmailSendFailed)
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeAuthEmailSendFailed, nil)
+		middleware.SetAuthErrorCode(c, apperrors.CodeAuthEmailSendFailed)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeAuthEmailSendFailed, nil)
 		h.auditSvc.Log(c.Request.Context(), nil, "auth.password_forgot", "failed", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"email": req.Email})
 		return
 	}
@@ -325,13 +326,13 @@ type resetPasswordReq struct {
 func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	var req resetPasswordReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.SetAuthErrorCode(c, httpx.CodeBadRequest)
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+		middleware.SetAuthErrorCode(c, apperrors.CodeBadRequest)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeBadRequest, nil)
 		return
 	}
 	if h.emailSvc == nil || h.emailSvc.ResetPassword(c.Request.Context(), req.Token, req.NewPassword) != nil {
-		middleware.SetAuthErrorCode(c, httpx.CodeAuthPasswordResetFailed)
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeAuthPasswordResetFailed, nil)
+		middleware.SetAuthErrorCode(c, apperrors.CodeAuthPasswordResetFailed)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeAuthPasswordResetFailed, nil)
 		h.auditSvc.Log(c.Request.Context(), nil, "auth.password_reset", "failed", c.ClientIP(), c.Request.UserAgent(), nil)
 		return
 	}

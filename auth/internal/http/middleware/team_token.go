@@ -10,6 +10,7 @@ import (
 	jwtlib "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
+	apperrors "github.com/MiraiMagicLab/go-platform-kit/platform/errors"
 	"github.com/MiraiMagicLab/go-platform-kit/platform/httpx"
 )
 
@@ -71,7 +72,7 @@ func (v *TeamTokenVerifier) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authz := c.GetHeader("Authorization")
 		if !strings.HasPrefix(strings.ToLower(authz), "bearer ") {
-			httpx.Fail(c, http.StatusUnauthorized, httpx.CodeUnauthorized, nil)
+			httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeUnauthorized, nil)
 			c.Abort()
 			return
 		}
@@ -83,38 +84,38 @@ func (v *TeamTokenVerifier) Middleware() gin.HandlerFunc {
 			jwtlib.WithAudience(v.aud),
 		)
 		if err != nil || tok == nil || !tok.Valid {
-			httpx.Fail(c, http.StatusUnauthorized, httpx.CodeAuthTokenInvalid, nil)
+			httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeAuthTokenInvalid, nil)
 			c.Abort()
 			return
 		}
 
 		subjectUUID, err := uuid.Parse(claims.Subject)
 		if err != nil {
-			httpx.Fail(c, http.StatusUnauthorized, httpx.CodeUnauthorized, nil)
+			httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeUnauthorized, nil)
 			c.Abort()
 			return
 		}
 
 		if claims.AppAccess != "read" && claims.AppAccess != "write" {
-			httpx.Fail(c, http.StatusUnauthorized, httpx.CodeAuthTokenInvalid, nil)
+			httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeAuthTokenInvalid, nil)
 			c.Abort()
 			return
 		}
 		if len(claims.Capabilities) == 0 {
-			httpx.Fail(c, http.StatusUnauthorized, httpx.CodeAuthTokenInvalid, nil)
+			httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeAuthTokenInvalid, nil)
 			c.Abort()
 			return
 		}
 
 		wsID, err := uuid.Parse(claims.WorkspaceID)
 		if err != nil {
-			httpx.Fail(c, http.StatusUnauthorized, httpx.CodeAuthTokenInvalid, nil)
+			httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeAuthTokenInvalid, nil)
 			c.Abort()
 			return
 		}
 		appID, err := uuid.Parse(claims.AppID)
 		if err != nil {
-			httpx.Fail(c, http.StatusUnauthorized, httpx.CodeAuthTokenInvalid, nil)
+			httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeAuthTokenInvalid, nil)
 			c.Abort()
 			return
 		}
@@ -136,12 +137,12 @@ func RequireTeamAccess(level string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ta, ok := TeamAuthFromCtx(c)
 		if !ok {
-			httpx.FailCode(c, http.StatusForbidden, httpx.CodeForbidden, nil)
+			httpx.FailCode(c, http.StatusForbidden, apperrors.CodeForbidden, nil)
 			c.Abort()
 			return
 		}
 		if !accessLevelGTE(ta.AppAccess, level) {
-			httpx.FailCode(c, http.StatusForbidden, httpx.CodeForbidden, nil)
+			httpx.FailCode(c, http.StatusForbidden, apperrors.CodeForbidden, nil)
 			c.Abort()
 			return
 		}
@@ -154,7 +155,7 @@ func RequireTeamCapability(capability string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ta, ok := TeamAuthFromCtx(c)
 		if !ok {
-			httpx.FailCode(c, http.StatusForbidden, httpx.CodeForbidden, nil)
+			httpx.FailCode(c, http.StatusForbidden, apperrors.CodeForbidden, nil)
 			c.Abort()
 			return
 		}
@@ -164,7 +165,7 @@ func RequireTeamCapability(capability string) gin.HandlerFunc {
 				return
 			}
 		}
-		httpx.FailCode(c, http.StatusForbidden, httpx.CodeForbidden, nil)
+		httpx.FailCode(c, http.StatusForbidden, apperrors.CodeForbidden, nil)
 		c.Abort()
 	}
 }

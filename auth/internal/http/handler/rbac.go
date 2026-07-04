@@ -13,7 +13,9 @@ import (
 	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/usecase/admin"
 	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/usecase/audit"
 	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/usecase/rbac"
+	apperrors "github.com/MiraiMagicLab/go-platform-kit/platform/errors"
 	"github.com/MiraiMagicLab/go-platform-kit/platform/httpx"
+	"github.com/MiraiMagicLab/go-platform-kit/platform/pagination"
 )
 
 // RBACHandler handles RBAC admin endpoints.
@@ -36,12 +38,12 @@ type createRoleReq struct {
 func (h *RBACHandler) CreateRole(c *gin.Context) {
 	var req createRoleReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeBadRequest, nil)
 		return
 	}
 	id, err := h.rbacSvc.CreateRole(c.Request.Context(), req.Name)
 	if err != nil {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeRBACCreateRoleFailed, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeRBACCreateRoleFailed, nil)
 		return
 	}
 	httpx.Success(c, http.StatusCreated, "success", gin.H{"id": id.String()}, nil)
@@ -55,12 +57,12 @@ type createPermissionReq struct {
 func (h *RBACHandler) CreatePermission(c *gin.Context) {
 	var req createPermissionReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeBadRequest, nil)
 		return
 	}
 	id, err := h.rbacSvc.CreatePermission(c.Request.Context(), req.Name)
 	if err != nil {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeRBACCreatePermissionFailed, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeRBACCreatePermissionFailed, nil)
 		return
 	}
 	httpx.Success(c, http.StatusCreated, "success", gin.H{"id": id.String()}, nil)
@@ -75,25 +77,25 @@ type assignPermissionsReq struct {
 func (h *RBACHandler) AssignPermissionsToRole(c *gin.Context) {
 	roleID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeBadRequest, nil)
 		return
 	}
 	var req assignPermissionsReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeBadRequest, nil)
 		return
 	}
 	ids := make([]uuid.UUID, 0, len(req.PermissionIDs))
 	for _, s := range req.PermissionIDs {
 		id, err := uuid.Parse(s)
 		if err != nil {
-			httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+			httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeBadRequest, nil)
 			return
 		}
 		ids = append(ids, id)
 	}
 	if err := h.rbacSvc.AssignPermissionsToRole(c.Request.Context(), roleID, ids); err != nil {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeRBACAssignFailed, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeRBACAssignFailed, nil)
 		return
 	}
 	httpx.Success(c, http.StatusOK, "success", gin.H{"ok": true}, nil)
@@ -108,25 +110,25 @@ type assignRolesReq struct {
 func (h *RBACHandler) AssignRolesToUser(c *gin.Context) {
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeBadRequest, nil)
 		return
 	}
 	var req assignRolesReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeBadRequest, nil)
 		return
 	}
 	ids := make([]uuid.UUID, 0, len(req.RoleIDs))
 	for _, s := range req.RoleIDs {
 		id, err := uuid.Parse(s)
 		if err != nil {
-			httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+			httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeBadRequest, nil)
 			return
 		}
 		ids = append(ids, id)
 	}
 	if err := h.rbacSvc.AssignRolesToUser(c.Request.Context(), userID, ids); err != nil {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeRBACAssignFailed, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeRBACAssignFailed, nil)
 		return
 	}
 	httpx.Success(c, http.StatusOK, "success", gin.H{"ok": true}, nil)
@@ -142,21 +144,21 @@ type banReq struct {
 func (h *RBACHandler) BanUser(c *gin.Context) {
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeBadRequest, nil)
 		return
 	}
 	var req banReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeBadRequest, nil)
 		return
 	}
 	until, err := parseTime(req.Until)
 	if err != nil {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeBadRequest, nil)
 		return
 	}
 	if err := h.adminSvc.BanUser(c.Request.Context(), userID, until, req.Reason); err != nil {
-		httpx.FailCode(c, http.StatusInternalServerError, httpx.CodeInternal, nil)
+		httpx.FailCode(c, http.StatusInternalServerError, apperrors.CodeInternal, nil)
 		return
 	}
 	h.auditSvc.Log(c.Request.Context(), &userID, "user.ban", "success", c.ClientIP(), c.Request.UserAgent(), map[string]interface{}{"until": req.Until, "reason": req.Reason})
@@ -167,11 +169,11 @@ func (h *RBACHandler) BanUser(c *gin.Context) {
 func (h *RBACHandler) UnbanUser(c *gin.Context) {
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeBadRequest, nil)
 		return
 	}
 	if err := h.adminSvc.UnbanUser(c.Request.Context(), userID); err != nil {
-		httpx.FailCode(c, http.StatusInternalServerError, httpx.CodeInternal, nil)
+		httpx.FailCode(c, http.StatusInternalServerError, apperrors.CodeInternal, nil)
 		return
 	}
 	h.auditSvc.Log(c.Request.Context(), &userID, "user.unban", "success", c.ClientIP(), c.Request.UserAgent(), nil)
@@ -182,11 +184,11 @@ func (h *RBACHandler) UnbanUser(c *gin.Context) {
 func (h *RBACHandler) DeleteUser(c *gin.Context) {
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		httpx.FailCode(c, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+		httpx.FailCode(c, http.StatusBadRequest, apperrors.CodeBadRequest, nil)
 		return
 	}
 	if err := h.adminSvc.DeleteUser(c.Request.Context(), userID); err != nil {
-		httpx.FailCode(c, http.StatusInternalServerError, httpx.CodeInternal, nil)
+		httpx.FailCode(c, http.StatusInternalServerError, apperrors.CodeInternal, nil)
 		return
 	}
 	h.auditSvc.Log(c.Request.Context(), &userID, "user.delete", "success", c.ClientIP(), c.Request.UserAgent(), nil)
@@ -220,7 +222,7 @@ func (h *RBACHandler) ListUsers(c *gin.Context) {
 
 	users, total, err := h.adminSvc.ListUsers(c.Request.Context(), page, pageSize, filter)
 	if err != nil {
-		httpx.FailCode(c, http.StatusInternalServerError, httpx.CodeInternal, nil)
+		httpx.FailCode(c, http.StatusInternalServerError, apperrors.CodeInternal, nil)
 		return
 	}
 
@@ -240,7 +242,14 @@ func (h *RBACHandler) ListUsers(c *gin.Context) {
 		})
 	}
 
-	httpx.Pagination(c, http.StatusOK, out, page, pageSize, int64(total))
+	httpx.Success(c, http.StatusOK, apperrors.CodeSuccess, pagination.Result{
+		Records: out,
+		Pagination: pagination.Meta{
+			Limit:  pageSize,
+			Offset: (page - 1) * pageSize,
+			Total:  int64(total),
+		},
+	}, nil)
 }
 
 func parseTime(s string) (time.Time, error) {

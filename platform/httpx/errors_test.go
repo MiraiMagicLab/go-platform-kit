@@ -9,25 +9,26 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 
+	apperrors "github.com/MiraiMagicLab/go-platform-kit/platform/errors"
 	"github.com/MiraiMagicLab/go-platform-kit/platform/httpx"
 )
 
 func TestMapError(t *testing.T) {
-	mapper := func(err error) (httpx.MappedError, bool) {
+	mapper := func(err error) (apperrors.MappedError, bool) {
 		if errors.Is(err, errors.New("known")) {
-			return httpx.MappedError{Status: http.StatusTeapot, Code: "M0000999"}, true
+			return apperrors.MappedError{Status: http.StatusTeapot, Code: "M0000999"}, true
 		}
-		return httpx.MappedError{}, false
+		return apperrors.MappedError{}, false
 	}
 
-	_, ok := httpx.MapError(errors.New("other"), mapper)
+	_, ok := apperrors.MapError(errors.New("other"), mapper)
 	assert.False(t, ok)
 
-	mapped, ok := httpx.MapError(errors.New("known"), func(err error) (httpx.MappedError, bool) {
+	mapped, ok := apperrors.MapError(errors.New("known"), func(err error) (apperrors.MappedError, bool) {
 		if err.Error() == "known" {
-			return httpx.MappedError{Status: http.StatusBadRequest, Code: httpx.CodeBadRequest}, true
+			return apperrors.MappedError{Status: http.StatusBadRequest, Code: apperrors.CodeBadRequest}, true
 		}
-		return httpx.MappedError{}, false
+		return apperrors.MappedError{}, false
 	})
 	assert.True(t, ok)
 	assert.Equal(t, http.StatusBadRequest, mapped.Status)
@@ -38,7 +39,7 @@ func TestWriteError(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 
-	written := httpx.WriteError(c, errors.New("x"), httpx.CodeInternal, http.StatusInternalServerError)
+	written := httpx.WriteError(c, errors.New("x"), apperrors.CodeInternal, http.StatusInternalServerError)
 	assert.True(t, written)
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }

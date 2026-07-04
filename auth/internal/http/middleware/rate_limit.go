@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	apperrors "github.com/MiraiMagicLab/go-platform-kit/platform/errors"
 	"github.com/MiraiMagicLab/go-platform-kit/platform/httpx"
 )
 
@@ -63,7 +64,7 @@ func SensitiveRateLimit(redisClient RedisRateLimiter, mem *InMemoryRateLimiter, 
 		if redisClient != nil {
 			count, err := redisClient.Incr(c, key, window)
 			if err == nil && count > int64(limit) {
-				httpx.FailCode(c, http.StatusTooManyRequests, httpx.CodeRateLimited, nil)
+				httpx.FailCode(c, http.StatusTooManyRequests, apperrors.CodeRateLimited, nil)
 				c.Abort()
 				return
 			}
@@ -74,7 +75,7 @@ func SensitiveRateLimit(redisClient RedisRateLimiter, mem *InMemoryRateLimiter, 
 		}
 
 		if mem != nil && !mem.Allow(key, limit, window) {
-			httpx.FailCode(c, http.StatusTooManyRequests, httpx.CodeRateLimited, nil)
+			httpx.FailCode(c, http.StatusTooManyRequests, apperrors.CodeRateLimited, nil)
 			c.Abort()
 			return
 		}

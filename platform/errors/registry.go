@@ -1,6 +1,10 @@
-package httpx
+package errors
 
-import "sync"
+import (
+	"fmt"
+	"strings"
+	"sync"
+)
 
 var (
 	mu          sync.RWMutex
@@ -44,6 +48,15 @@ func AllRegisteredCodes() map[string]string {
 	out := make(map[string]string, len(allMessages))
 	for k, v := range allMessages {
 		out[k] = v
+	}
+	return out
+}
+
+// RenderMessage substitutes positional placeholders ({0}, {1}, …) in a template string.
+func RenderMessage(template string, args ...interface{}) string {
+	out := template
+	for i, v := range args {
+		out = strings.ReplaceAll(out, fmt.Sprintf("{%d}", i), fmt.Sprint(v))
 	}
 	return out
 }

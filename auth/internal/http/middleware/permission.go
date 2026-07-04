@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/MiraiMagicLab/go-platform-kit/auth/internal/usecase/rbac"
+	apperrors "github.com/MiraiMagicLab/go-platform-kit/platform/errors"
 	"github.com/MiraiMagicLab/go-platform-kit/platform/httpx"
 )
 
@@ -15,7 +16,7 @@ func RequirePermission(rbacSvc *rbac.RBACService, permission string, adminBypass
 	return func(c *gin.Context) {
 		userID, ok := UserIDFromCtx(c)
 		if !ok {
-			httpx.FailCode(c, http.StatusUnauthorized, httpx.CodeUnauthorized, nil)
+			httpx.FailCode(c, http.StatusUnauthorized, apperrors.CodeUnauthorized, nil)
 			c.Abort()
 			return
 		}
@@ -32,7 +33,7 @@ func RequirePermission(rbacSvc *rbac.RBACService, permission string, adminBypass
 
 		perms, err := rbacSvc.ListUserPermissions(c.Request.Context(), userID)
 		if err != nil {
-			httpx.FailCode(c, http.StatusInternalServerError, httpx.CodeInternal, nil)
+			httpx.FailCode(c, http.StatusInternalServerError, apperrors.CodeInternal, nil)
 			c.Abort()
 			return
 		}
@@ -43,7 +44,7 @@ func RequirePermission(rbacSvc *rbac.RBACService, permission string, adminBypass
 			}
 		}
 
-		httpx.FailCodeArgs(c, http.StatusForbidden, httpx.CodeForbidden, permission)
+		httpx.FailCodeArgs(c, http.StatusForbidden, apperrors.CodeForbidden, permission)
 		c.Abort()
 	}
 }

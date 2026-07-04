@@ -12,7 +12,7 @@ import (
 	"github.com/MiraiMagicLab/go-platform-kit/platform/config"
 	"github.com/MiraiMagicLab/go-platform-kit/platform/health"
 	"github.com/MiraiMagicLab/go-platform-kit/platform/httpx"
-	"github.com/MiraiMagicLab/go-platform-kit/platform/log"
+	platformlog "github.com/MiraiMagicLab/go-platform-kit/platform/log"
 	"github.com/MiraiMagicLab/go-platform-kit/platform/postgres"
 )
 
@@ -30,7 +30,7 @@ func main() {
 	}
 	defer postgres.Close(pool)
 
-	logger := log.NewSlog(nil)
+	logger := platformlog.NewSlog(nil)
 	router := gin.New()
 	router.Use(httpx.Recovery(logger))
 
@@ -41,7 +41,7 @@ func main() {
 	router.GET("/health", func(c *gin.Context) {
 		statuses := health.Run(c.Request.Context(), checkers...)
 		if !health.AllOK(statuses) {
-			httpx.FailCode(c, http.StatusServiceUnavailable, "SERVICE_DEGRADED", statuses)
+			httpx.FailCode(c, http.StatusServiceUnavailable, "SERVICE_DEGRADED", gin.H{"checks": statuses})
 			return
 		}
 		httpx.OK(c, gin.H{"status": "ok"})

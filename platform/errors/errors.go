@@ -1,8 +1,4 @@
-package httpx
-
-import (
-	"github.com/gin-gonic/gin"
-)
+package errors
 
 // MappedError describes a stable API error response derived from a domain error.
 type MappedError struct {
@@ -30,15 +26,20 @@ func MapError(err error, mappers ...ErrorMapper) (MappedError, bool) {
 	return MappedError{}, false
 }
 
-// WriteError writes a mapped error response, or a fallback code when no mapper matches.
+// WriteErrorFn is a function that writes an error response with the given status, code, and params.
+// This avoids a circular dependency with the httpx package.
+type WriteErrorFn func(status int, code string, params map[string]interface{})
+
+// WriteError runs the error mapper chain and calls writeFn with the result.
+// If no mapper matches, it falls back to the provided fallback code and status.
 // Returns true when a response was written.
-func WriteError(c *gin.Context, err error, fallbackCode string, fallbackStatus int, mappers ...ErrorMapper) bool {
+func WriteError(writeFn WriteErrorFn, err error, fallbackCode string, fallbackStatus int, mappers ...ErrorMapper) bool {
 	if mapped, ok := MapError(err, mappers...); ok {
-		FailCode(c, mapped.Status, mapped.Code, mapped.Params)
+		writeFn(mapped.Status, mapped.Code, mapped.Params)
 		return true
 	}
 	if fallbackCode != "" {
-		FailCode(c, fallbackStatus, fallbackCode, nil)
+		writeFn(fallbackStatus, fallbackCode, nil)
 		return true
 	}
 	return false

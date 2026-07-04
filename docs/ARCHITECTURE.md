@@ -45,14 +45,17 @@ Capability (auth, admin, ...)
 
 | Package | Role |
 |---------|------|
-| `platform/httpx` | Standard JSON responses and M00xxxx codes |
+| `platform/httpx` | Standard JSON responses, M00xxxx error codes, recovery, pagination, error mapper |
 | `platform/log` | Logger interface; default noop |
-| `platform/config` | Infra config loader; opt-in `FromEnv()` |
+| `platform/config` | Infra config loader; opt-in `FromEnv()`, `OpenInfra()` |
 | `platform/postgres` | Open and ping shared pools |
 | `platform/redis` | Open and ping shared clients |
 | `platform/storage` | Cloudflare R2 ObjectStore |
 | `platform/mail` | Mailer interface + SMTP sender (STARTTLS, context timeout) |
 | `platform/health` | Health check helpers for Postgres and Redis |
+| `platform/transaction` | Generic pgx transaction helper (`WithTx`, `TxFromCtx`) |
+| `platform/clock` | Time abstraction for testability (`RealClock`, `FixedClock`) |
+| `platform/id` | Pluggable ID generator (`UUIDGenerator`) |
 
 Capabilities receive **opened** clients/pools from the host. They do not read environment variables directly.
 
@@ -166,6 +169,18 @@ Schema: `migrations/0001_baseline.up.sql`, applied via `cmd/migrate`.
 - Four files at package root — intentionally minimal
 - No database dependency; compiles admin panel schema from host-provided contract JSON
 
+## How to add a new capability
+
+1. Create new top-level package (e.g., `notify/`)
+2. Follow auth pattern: `open.go` + `api.go` + `option.go` + `config.go` + `internal/`
+3. Accept platform dependencies via functional options (`WithPostgres`, `WithLogger`, etc.)
+4. Never import other capabilities
+5. Add migration in `migrations/` if DB schema needed
+6. Add example in `examples/`
+7. Document in `docs/`
+
+See [docs/DEPENDENCY_RULES.md](DEPENDENCY_RULES.md) for complete rules.
+
 ## Roadmap
 
 | Capability | Status |
@@ -173,6 +188,9 @@ Schema: `migrations/0001_baseline.up.sql`, applied via `cmd/migrate`.
 | auth | Implemented |
 | admin | Implemented |
 | platform/storage R2 | Implemented (Cloudflare R2 only) |
+| platform/transaction | Implemented |
+| platform/clock | Implemented |
+| platform/id | Implemented |
 | auth unit tests | login, MFA, Google OAuth, RBAC, session, email, admin, cleanup, middleware, handler |
 | auth integration tests | register, login/logout, refresh, MFA, RBAC, Google OAuth (Postgres + mock Google) |
 | postgres/redis integration | user/identity repos, JWT user cache (CI with DATABASE_URL + REDIS_URL) |

@@ -55,16 +55,26 @@ go run ./examples/full-stack
 
 ## Packages
 
+### Platform (stable kernel)
+
 | Import | Purpose |
 |--------|---------|
-| `platform/httpx` | JSON API envelope + M00xxxx error codes |
+| `platform/config` | Shared infra config (`FromEnv`, `OpenInfra`) |
 | `platform/log` | Injectable logger interface |
-| `platform/config` | Shared infra config (`FromEnv`) |
-| `platform/postgres` | Postgres pool helper |
-| `platform/redis` | Redis client helper |
+| `platform/httpx` | JSON API envelope, M00xxxx error codes, recovery, pagination |
+| `platform/postgres` | Postgres pool helper (Open/Ping/Close) |
+| `platform/redis` | Redis client helper (Open/Ping/Close) |
+| `platform/health` | Health check aggregator (Postgres, Redis) |
 | `platform/storage` | Cloudflare R2 object store (upload, delete, signed URL) |
 | `platform/mail` | SMTP mailer with STARTTLS |
-| `platform/health` | Postgres/Redis health check helpers |
+| `platform/transaction` | Generic pgx transaction helper (`WithTx`, `TxFromCtx`) |
+| `platform/clock` | Time abstraction for testability (`RealClock`, `FixedClock`) |
+| `platform/id` | Pluggable ID generator (`UUIDGenerator`) |
+
+### Capabilities
+
+| Import | Purpose |
+|--------|---------|
 | `auth` | Authentication, sessions, RBAC, MFA, Google OAuth |
 | `admin` | Admin shell compiler + v3 migration |
 

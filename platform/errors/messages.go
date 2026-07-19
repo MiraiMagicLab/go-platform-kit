@@ -11,7 +11,7 @@ var commonMessages = map[string]string{
 	CodeNoContent: "No content",
 
 	// Mirai MessageCodes
-	"M0100": "Bad request",
+	"M0100": "Invalid request",
 	"M0105": "Rate limit exceeded",
 	"M0200": "Authentication required",
 	"M0201": "Token expired",

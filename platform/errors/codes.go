@@ -1,121 +1,72 @@
 package errors
 
-// ── Success codes (SP=00, CC=00) ────────────────────────────────────────────
-// Format: S + 2-digit product + 2-digit category + 3-digit sequence.
-// Mirror structure of error codes (M-prefix) for consistent client i18n.
-
+// Success codes (optional client i18n for non-error outcomes).
 const (
-	// CodeSuccess indicates a successful operation.
-	CodeSuccess = "S0000000"
-	// CodeCreated indicates a resource was successfully created.
-	CodeCreated = "S0000001"
-	// CodeUpdated indicates a resource was successfully updated.
-	CodeUpdated = "S0000002"
-	// CodeDeleted indicates a resource was successfully deleted.
-	CodeDeleted = "S0000003"
-	// CodeNoContent indicates a successful operation with no response body.
+	CodeSuccess   = "S0000000"
+	CodeCreated   = "S0000001"
+	CodeUpdated   = "S0000002"
+	CodeDeleted   = "S0000003"
 	CodeNoContent = "S0000004"
 )
 
-// ── Platform Common error codes (MP=00, CC=00) ──────────────────────────────
-// Format: M + 2-digit product + 2-digit category + 3-digit sequence.
-
+// Platform wire codes aligned with Mirai Java MessageCodes (Mxxxx).
+// Auth client buckets (Soybean-admin pattern):
+//
+//	M0200 → silent logout
+//	M0201 → refresh access token then retry (never return from /auth/refresh)
+//	M0202 → modal logout (invalid / revoked / bad refresh)
+//	M0203 → credentials error (login form; do not logout)
+//
+// See ERROR_CODE_REFERENCE.md.
 const (
-	// CodeUnknownError is returned when an unexpected error occurs.
-	CodeUnknownError = "M0000000"
-	// CodeBadRequest indicates malformed or invalid request input.
-	CodeBadRequest = "M0000001"
-	// CodeUnauthorized indicates missing or invalid authentication.
-	CodeUnauthorized = "M0000002"
-	// CodeForbidden indicates the authenticated user lacks required permissions.
-	CodeForbidden = "M0000003"
-	// CodeNotFound indicates the requested resource does not exist.
-	CodeNotFound = "M0000004"
-	// CodeConflict indicates a resource state conflict such as a duplicate entry.
-	CodeConflict = "M0000005"
-	// CodeRateLimited indicates the client exceeded the allowed request rate.
-	CodeRateLimited = "M0000006"
-	// CodeInternal indicates an unexpected server-side error.
-	CodeInternal = "M0000007"
+	CodeUnknownError = "M0900"
+	CodeBadRequest   = "M0100"
+	CodeUnauthorized = "M0200"
+	CodeForbidden    = "M0250"
+	CodeNotFound     = "M0300"
+	CodeConflict     = "M0301"
+	CodeRateLimited  = "M0105"
+	CodeInternal     = "M0900"
 )
 
-// ── Auth (MP=00, CC=01) ────────────────────────────────────────────────────
-
+// Auth
 const (
-	// CodeAuthInvalidCredentials indicates the supplied email or password is incorrect.
-	CodeAuthInvalidCredentials = "M0001001"
-	// CodeAuthInvalidEmail indicates the email address failed format validation.
-	CodeAuthInvalidEmail = "M0001002"
-	// CodeAuthInvalidPassword indicates the password does not meet minimum requirements.
-	CodeAuthInvalidPassword = "M0001003"
-	// CodeAuthTokenInvalid indicates the JWT token is malformed or has an invalid signature.
-	CodeAuthTokenInvalid = "M0001004"
-	// CodeAuthTokenExpired indicates the JWT token has passed its expiration time.
-	CodeAuthTokenExpired = "M0001005"
-	// CodeAuthTokenRevoked indicates the JWT token has been explicitly revoked.
-	CodeAuthTokenRevoked = "M0001006"
-	// CodeAuthInvalidRefresh indicates the refresh token is invalid, expired, or already rotated.
-	CodeAuthInvalidRefresh = "M0001007"
-	// CodeAuthEmailNotVerified indicates the user's email address has not been verified.
-	CodeAuthEmailNotVerified = "M0001008"
-	// CodeAuthUserBanned indicates the user account is currently banned.
-	CodeAuthUserBanned = "M0001009"
-	// CodeAuthAccountLocked indicates the user account is temporarily locked due to failed login attempts.
-	CodeAuthAccountLocked = "M0001010"
-	// CodeAuthRegisterFailed indicates user registration could not be completed.
-	CodeAuthRegisterFailed = "M0001011"
-	// CodeAuthLogoutFailed indicates the logout operation could not be completed.
-	CodeAuthLogoutFailed = "M0001012"
-	// CodeAuthPasswordResetFailed indicates the password reset could not be completed.
-	CodeAuthPasswordResetFailed = "M0001013"
-	// CodeAuthEmailSendFailed indicates the verification or reset email could not be sent.
-	CodeAuthEmailSendFailed = "M0001014"
-	// CodeAuthInvalidActionToken indicates the email action token is invalid or expired.
-	CodeAuthInvalidActionToken = "M0001015"
-	// CodeAuthInvalidMFA indicates the MFA verification code is incorrect or the challenge token is invalid.
-	CodeAuthInvalidMFA = "M0001016"
+	CodeAuthInvalidCredentials  = "M0203"
+	CodeAuthInvalidEmail        = "M0100"
+	CodeAuthInvalidPassword     = "M0100"
+	CodeAuthTokenInvalid        = "M0202"
+	CodeAuthTokenExpired        = "M0201"
+	CodeAuthTokenRevoked        = "M0202"
+	CodeAuthInvalidRefresh      = "M0202"
+	CodeAuthEmailNotVerified    = "M0252"
+	CodeAuthUserBanned          = "M0252"
+	CodeAuthAccountLocked       = "M0251"
+	CodeAuthRegisterFailed      = "M0400"
+	CodeAuthLogoutFailed        = "M0900"
+	CodeAuthPasswordResetFailed = "M0400"
+	CodeAuthEmailSendFailed     = "M0800"
+	CodeAuthInvalidActionToken  = "M0202"
+	CodeAuthInvalidMFA          = "M0203"
 )
 
-// ── Session (MP=00, CC=02) ────────────────────────────────────────────────
-
+// Session
 const (
-	// CodeSessionNotFound indicates the requested session does not exist or has been revoked.
-	CodeSessionNotFound = "M0002001"
-	// CodeSessionNoSIDInToken indicates the access token does not contain a session ID claim.
-	CodeSessionNoSIDInToken = "M0002002"
+	CodeSessionNotFound     = "M0300"
+	CodeSessionNoSIDInToken = "M0202"
 )
 
-// ── RBAC (MP=00, CC=03) ──────────────────────────────────────────────────
-
+// RBAC / MFA / OAuth — share Mirai business/system codes when no dedicated MessageCode exists.
 const (
-	// CodeRBACCreateRoleFailed indicates role creation could not be completed.
-	CodeRBACCreateRoleFailed = "M0003001"
-	// CodeRBACCreatePermissionFailed indicates permission creation could not be completed.
-	CodeRBACCreatePermissionFailed = "M0003002"
-	// CodeRBACAssignFailed indicates the role or permission assignment could not be completed.
-	CodeRBACAssignFailed = "M0003003"
-)
+	CodeRBACCreateRoleFailed       = "M0400"
+	CodeRBACCreatePermissionFailed = "M0400"
+	CodeRBACAssignFailed           = "M0400"
 
-// ── MFA (MP=00, CC=04) ───────────────────────────────────────────────────
+	CodeMFASetupFailed   = "M0400"
+	CodeMFAEnableFailed  = "M0400"
+	CodeMFADisableFailed = "M0400"
 
-const (
-	// CodeMFASetupFailed indicates TOTP setup could not be completed.
-	CodeMFASetupFailed = "M0004001"
-	// CodeMFAEnableFailed indicates TOTP enablement could not be completed (e.g. invalid code).
-	CodeMFAEnableFailed = "M0004002"
-	// CodeMFADisableFailed indicates MFA disable could not be completed.
-	CodeMFADisableFailed = "M0004003"
-)
-
-// ── OAuth (MP=00, CC=05) ─────────────────────────────────────────────────
-
-const (
-	// CodeOAuthStateInvalid indicates the OAuth CSRF state cookie does not match the callback parameter.
-	CodeOAuthStateInvalid = "M0005001"
-	// CodeOAuthExchangeFail indicates the OAuth authorization code exchange failed.
-	CodeOAuthExchangeFail = "M0005002"
-	// CodeOAuthUserFail indicates user lookup or creation from OAuth identity failed.
-	CodeOAuthUserFail = "M0005003"
-	// CodeOAuthNotConfigured indicates the requested OAuth provider is not configured.
-	CodeOAuthNotConfigured = "M0005004"
+	CodeOAuthStateInvalid  = "M0100"
+	CodeOAuthExchangeFail  = "M0800"
+	CodeOAuthUserFail      = "M0800"
+	CodeOAuthNotConfigured = "M0400"
 )
